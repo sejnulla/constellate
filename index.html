@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Constellate — tracking overlay studio</title>
+<style>
+  :root{
+    --bg:#000; --panel:#0b0b0b; --panel-2:#161616; --line:#2a2a2a;
+    --text:#f0f0f0; --muted:#888; --accent:#fff; --accent-2:#bbb; --warn:#ccc;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:13px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh}
+  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:12px}
+  header h1{font-size:15px;margin:0;letter-spacing:.3px}
+  header .sub{color:var(--muted);font-size:12px}
+  header .hint{color:var(--accent)}
+  main{flex:1;display:flex;min-height:0}
+  #stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
+  #wrap{position:relative;line-height:0}
+  #view{display:block;cursor:crosshair}
+  #overlay{position:absolute;inset:0;pointer-events:none}
+  #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);flex-direction:column;gap:10px;text-align:center;padding:24px}
+  #empty strong{color:var(--text);font-weight:600}
+  aside{width:312px;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:14px}
+  .group{margin-bottom:18px}
+  .group h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+  label.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}
+  label.row span.val{color:var(--accent);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+  input[type=range]{width:128px;accent-color:var(--accent)}
+  select,button,input[type=text]{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit}
+  select{width:140px}
+  input[type=text]{width:140px}
+  button{cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+  button.wide{width:100%}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .swatch{width:22px;height:22px;border-radius:5px;border:1px solid var(--line)}
+  .controls-bottom{border-top:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .controls-bottom .stat{color:var(--muted);font-variant-numeric:tabular-nums}
+  .controls-bottom .stat b{color:var(--text)}
+  .pill{padding:2px 8px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--muted)}
+  .checkrow{display:flex;align-items:center;gap:8px;margin:7px 0}
+  .note{font-size:11px;color:var(--muted);margin-top:6px}
+  input[type=file]{font-size:12px;width:100%}
+  fieldset{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:0}
+  fieldset legend{color:var(--muted);padding:0 6px;font-size:11px}
+  .modepill{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .modepill.on{color:#000;background:var(--accent);border-color:var(--accent)}
+  #smartStatus{font-size:11px}
+  .s-load{color:var(--warn)} .s-ok{color:var(--accent)} .s-err{color:var(--accent-2)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Constell<span class="hint">ate</span></h1>
+  <span class="sub">color &amp; object tracking → procedural overlays · runs entirely in your browser</span>
+  <span class="modepill" id="modePill" style="margin-left:auto">COLOR MODE</span>
+</header>
+
+<main>
+  <div id="stage">
+    <div id="wrap">
+      <canvas id="view"></canvas>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div id="empty">
+      <strong>Load a video to begin</strong>
+      <span>Color mode: click a colored region to set the target. Smart mode: detects objects automatically.</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="group">
+      <h2>Source</h2>
+      <input id="file" type="file" accept="video/*" />
+      <label class="row" style="margin-top:8px"><span>Examples</span>
+        <select id="examples">
+          <option value="">— load example —</option>
+          <option value="examples/weavy.mp4">Weavy</option>
+          <option value="examples/loop.mp4">Loop</option>
+          <option value="examples/01.mp4">01</option>
+          <option value="examples/generative-art-studio.mp4">Generative Art Studio</option>
+          <option value="examples/video-1080p.mp4">Video 1080p</option>
+        </select>
+      </label>
+      <div class="note">Pick an example or load your own. Everything runs locally — nothing is uploaded.</div>
+    </div>
+
+    <div class="group">
+      <h2>Presets</h2>
+      <label class="row"><span>Saved</span>
+        <select id="presetList"><option value="">— presets —</option></select>
+      </label>
+      <div style="display:flex;gap:6px;margin:6px 0">
+        <button id="presetLoad">Load</button>
+        <button id="presetDelete">Delete</button>
+        <button id="presetReset">Reset defaults</button>
+      </div>
+      <label class="row"><span>Name</span><input id="presetName" type="text" placeholder="my look"></label>
+      <button id="presetSave" class="wide">Save current settings</button>
+      <div class="note">Presets are stored locally in your browser.</div>
+    </div>
+
+    <div class="group" id="colorGroup">
+      <h2>Target colours</h2>
+      <div id="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <label class="row"><span>Add colour</span>
+        <span style="display:flex;gap:6px;align-items:center">
+          <input id="picker" type="color" value="#ff4040" />
+          <button id="addColor">Add</button>
+        </span>
+      </label>
+      <button id="clearColors" class="wide" style="margin-bottom:6px">Clear colours</button>
+      <div class="note">Click the frame to sample &amp; add a colour. All colours are tracked together.</div>
+      <label class="row"><span>Hue tol</span><input id="hueTol" type="range" min="2" max="90" value="22"><span class="val" id="hueTolV">22</span></label>
+      <label class="row"><span>Sat tol</span><input id="satTol" type="range" min="5" max="100" value="45"><span class="val" id="satTolV">45</span></label>
+      <label class="row"><span>Val tol</span><input id="valTol" type="range" min="5" max="100" value="50"><span class="val" id="valTolV">50</span></label>
+      <label class="row"><span>Min blob</span><input id="minBlob" type="range" min="3" max="400" value="20"><span class="val" id="minBlobV">20</span></label>
+      <div class="checkrow"><input id="showMask" type="checkbox"><label for="showMask">Show detection mask</label></div>
+    </div>
+
+    <div class="group">
+      <h2>Smart mode <span class="modepill" id="smartPill">off</span></h2>
+      <fieldset>
+        <legend>semantic object tracking</legend>
+        <div class="checkrow"><input id="smart" type="checkbox"><label for="smart"><b>Detect objects</b> (YOLO-family + ByteTrack)</label></div>
+        <div id="smartStatus" class="note">Off. Toggling loads a detection model (~25&nbsp;MB) into the browser.</div>
+        <label class="row"><span>Model</span>
+          <select id="model">
+            <option value="Xenova/yolos-tiny">YOLOS-tiny (fast)</option>
+            <option value="Xenova/yolos-small">YOLOS-small (better)</option>
+            <option value="Xenova/detr-resnet-50">DETR-R50 (accurate)</option>
+          </select>
+        </label>
+        <label class="row"><span>Classes</span><input id="classes" type="text" placeholder="all (e.g. person,car)"></label>
+        <label class="row"><span>Confidence</span><input id="conf" type="range" min="10" max="90" value="40"><span class="val" id="confV">40</span></label>
+        <label class="row"><span>Detect every</span><input id="interval" type="range" min="0" max="800" step="1" value="150"><span class="val" id="intervalV">150</span></label>
+        <label class="row"><span>Min box (px)</span><input id="minBox" type="range" min="0" max="300" value="0"><span class="val" id="minBoxV">0</span></label>
+        <label class="row"><span>Confirm hits</span><input id="minHits" type="range" min="1" max="10" value="2"><span class="val" id="minHitsV">2</span></label>
+        <div class="note">"Detect every" = ms between detections (0 = as fast as the worker allows). Tracks ease toward the latest detection between runs.</div>
+      </fieldset>
+    </div>
+
+    <div class="group">
+      <h2>Quality &amp; tracking</h2>
+      <label class="row"><span>Proc width</span><input id="procW" type="range" min="160" max="640" step="40" value="320"><span class="val" id="procWV">320</span></label>
+      <label class="row"><span>Max targets</span><input id="maxT" type="range" min="2" max="512" value="24"><span class="val" id="maxTV">24</span></label>
+      <label class="row"><span>Link distance</span><input id="linkDist" type="range" min="10" max="240" value="70"><span class="val" id="linkDistV">70</span></label>
+      <label class="row"><span>Memory</span><input id="memory" type="range" min="0" max="40" value="10"><span class="val" id="memoryV">10</span></label>
+      <label class="row"><span>Smoothing</span><input id="smooth" type="range" min="0" max="1000" value="20"><span class="val" id="smoothV">20</span></label>
+    </div>
+
+    <div class="group">
+      <h2>Connections</h2>
+      <label class="row"><span>Layout</span>
+        <select id="mode">
+          <option value="none">None (nodes only)</option>
+          <option value="sequential">Sequential</option>
+          <option value="star">Star (hub)</option>
+          <option value="mesh">Full mesh</option>
+          <option value="mst" selected>Min. spanning tree</option>
+          <option value="knn">Nearest neighbours (k=2)</option>
+        </select>
+      </label>
+      <label class="row"><span>Line style</span>
+        <select id="lineStyle">
+          <option value="straight" selected>Straight</option>
+          <option value="curved">Curved</option>
+          <option value="dashed">Dashed</option>
+        </select>
+      </label>
+      <label class="row"><span>Curvature</span><input id="curv" type="range" min="0" max="120" value="40"><span class="val" id="curvV">40</span></label>
+      <label class="row"><span>Max edge len</span><input id="maxEdge" type="range" min="20" max="600" step="10" value="600"><span class="val" id="maxEdgeV">600</span></label>
+      <label class="row"><span>Line width</span><input id="lineW" type="range" min="1" max="6" value="1.5" step="0.5"><span class="val" id="lineWV">1.5</span></label>
+    </div>
+
+    <div class="group">
+      <h2>Nodes</h2>
+      <label class="row"><span>Shape</span>
+        <select id="nodeShape">
+          <option value="circle" selected>Circle</option>
+          <option value="box">Bounding box</option>
+        </select>
+      </label>
+      <label class="row"><span>Node size</span><input id="nodeSz" type="range" min="1" max="20" value="5"><span class="val" id="nodeSzV">5</span></label>
+      <label class="row"><span>Box border</span><input id="boxBorder" type="range" min="1" max="6" value="2" step="0.5"><span class="val" id="boxBorderV">2</span></label>
+      <label class="row"><span>Box corners</span>
+        <select id="boxCorners">
+          <option value="full" selected>Full rectangle</option>
+          <option value="brackets">Segmented (brackets)</option>
+        </select>
+      </label>
+      <label class="row"><span>Box fill</span><input id="boxFill" type="range" min="0" max="80" value="0"><span class="val" id="boxFillV">0</span></label>
+    </div>
+
+    <div class="group">
+      <h2>Style</h2>
+      <label class="row"><span>Colour by</span>
+        <select id="colorBy">
+          <option value="uniform">Uniform (accent)</option>
+          <option value="id">Per target (ID)</option>
+          <option value="class">Per class</option>
+        </select>
+      </label>
+      <label class="row"><span>Accent</span><input id="accent" type="color" value="#ffffff"></label>
+      <label class="row"><span>Label</span>
+        <select id="labelMode">
+          <option value="off">Off</option>
+          <option value="id">ID</option>
+          <option value="class" selected>Class + ID</option>
+          <option value="xy">XY coordinates</option>
+          <option value="idxy">ID + XY</option>
+        </select>
+      </label>
+      <label class="row"><span>Label size</span><input id="labelSize" type="range" min="8" max="48" value="11"><span class="val" id="labelSizeV">11</span></label>
+      <label class="row"><span>Trails</span><input id="trail" type="range" min="0" max="120" value="0"><span class="val" id="trailV">0</span></label>
+      <label class="row"><span>Trail width</span><input id="trailWidth" type="range" min="0.5" max="8" value="1.5" step="0.5"><span class="val" id="trailWidthV">1.5</span></label>
+      <label class="row"><span>Trail opacity</span><input id="trailOpacity" type="range" min="5" max="100" value="35"><span class="val" id="trailOpacityV">35</span></label>
+      <div class="checkrow"><input id="trailFade" type="checkbox" checked><label for="trailFade">Fade trail toward tail</label></div>
+      <div class="checkrow"><input id="showVideo" type="checkbox" checked><label for="showVideo">Show video under overlay</label></div>
+    </div>
+
+    <div class="group">
+      <h2>Export</h2>
+      <button id="record" class="wide" disabled>● Record overlay to WebM</button>
+      <div class="note">Composites video + overlay and saves a .webm clip.</div>
+    </div>
+  </aside>
+</main>
+
+<div class="controls-bottom">
+  <button id="play" class="primary" disabled>▶ Play</button>
+  <span class="pill" id="srcInfo">no source</span>
+  <span class="stat">targets: <b id="statTargets">0</b></span>
+  <span class="stat">tracks: <b id="statTracks">0</b></span>
+  <span class="stat">proc: <b id="statMs">0</b> ms</span>
+  <span class="stat" id="detStat"></span>
+  <span class="stat" style="margin-left:auto" id="hintMsg">click frame to sample colour</span>
+</div>
+
+<video id="vid" playsinline loop crossorigin="anonymous" style="display:none"></video>
+
+<!-- Smart detector: runs detection in a background Web Worker so the UI never blocks -->
+<script>
+  window.__smart = (() => {
+    // Worker source (module worker). Inference happens entirely off the main thread.
+    const WORKER_SRC = `
+      import { pipeline, env, RawImage } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
+      env.allowLocalModels = false;
+      let detector = null;
+      const build = (model, device, dtype) =>
+        pipeline("object-detection", model, dtype ? { device, dtype } : { device });
+      self.onmessage = async (e) => {
+        const m = e.data;
+        if (m.type === "load") {
+          detector = null;
+          // try fastest viable config first, fall back gracefully
+          const attempts = m.device === "webgpu"
+            ? [["webgpu","fp16"],["webgpu",null],["wasm","q8"],["wasm",null]]
+            : [["wasm","q8"],["wasm",null]];
+          let lastErr;
+          for (const [dev, dt] of attempts) {
+            try { detector = await build(m.model, dev, dt); self.postMessage({ type:"loaded", device:dev, dtype:dt }); return; }
+            catch (err) { lastErr = err; }
+          }
+          self.postMessage({ type:"error", error:String((lastErr && lastErr.message) || lastErr) });
+        } else if (m.type === "detect") {
+          if (!detector) { self.postMessage({ type:"result", id:m.id, dets:[] }); return; }
+          try {
+            const img = new RawImage(new Uint8ClampedArray(m.buf), m.w, m.h, 4).rgb();
+            const out = await detector(img, { threshold:m.threshold, percentage:false });
+            self.postMessage({ type:"result", id:m.id, dets:out });
+          } catch (err) { self.postMessage({ type:"result", id:m.id, dets:[] }); }
+        }
+      };
+    `;
+    let worker=null, ready=false, reqId=0, statusCb=null, loadDone=null;
+    const pending=new Map();
+    function ensure(){
+      if (worker) return;
+      const url = URL.createObjectURL(new Blob([WORKER_SRC], { type:"text/javascript" }));
+      worker = new Worker(url, { type:"module" });
+      worker.onmessage = (e) => {
+        const m = e.data;
+        if (m.type==="loaded"){ ready=true; statusCb && statusCb("ok","ready · "+m.device.toUpperCase()+(m.dtype?(" · "+m.dtype):"")); if(loadDone){loadDone(true);loadDone=null;} }
+        else if (m.type==="error"){ ready=false; statusCb && statusCb("err", m.error); if(loadDone){loadDone(false);loadDone=null;} }
+        else if (m.type==="result"){ const p=pending.get(m.id); if(p){ pending.delete(m.id); p(m.dets||[]); } }
+      };
+      worker.onerror = (e) => { statusCb && statusCb("err","worker error: "+(e.message||"failed")); if(loadDone){loadDone(false);loadDone=null;} };
+    }
+    return {
+      loaded(){ return ready; },
+      load(model, onStatus){
+        statusCb = onStatus; ensure(); ready=false;
+        onStatus && onStatus("loading","loading model in background…");
+        return new Promise(res=>{ loadDone=res; worker.postMessage({ type:"load", model, device: navigator.gpu ? "webgpu" : "wasm" }); });
+      },
+      unload(){ ready=false; if(worker){ worker.terminate(); worker=null; } pending.clear(); },
+      detect(imageData, threshold){
+        if(!ready || !worker) return Promise.resolve([]);
+        const id=++reqId, buf=imageData.data.buffer;
+        return new Promise(res=>{ pending.set(id,res); worker.postMessage({ type:"detect", id, buf, w:imageData.width, h:imageData.height, threshold }, [buf]); });
+      }
+    };
+  })();
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+
+  const vid = $("vid");
+  const view = $("view"), vctx = view.getContext("2d", { willReadFrequently:true });
+  const ov = $("overlay"), octx = ov.getContext("2d");
+  const proc = document.createElement("canvas");
+  const pctx = proc.getContext("2d", { willReadFrequently:true });
+  const det = document.createElement("canvas");                 // smart-mode detection buffer
+  const dctx = det.getContext("2d", { willReadFrequently:true });
+  const comp = document.createElement("canvas");                // export composite
+  const cctx = comp.getContext("2d");
+
+  // ---------- UI wiring ----------
+  const ui = {};
+  const ranges = ["hueTol","satTol","valTol","procW","minBlob","maxT","linkDist","memory","smooth",
+                  "nodeSz","lineW","trail","trailWidth","trailOpacity","maxEdge","conf","interval","boxBorder","boxFill","curv",
+                  "labelSize","minBox","minHits"];
+  ranges.forEach(k => { ui[k]=$(k); const v=$(k+"V"); const s=()=>v.textContent=ui[k].value; ui[k].addEventListener("input",s); s(); });
+  ["mode","colorBy","showMask","showVideo","accent","picker","smart","model","classes",
+   "nodeShape","boxCorners","lineStyle","labelMode","trailFade"].forEach(k=>ui[k]=$(k));
+
+  // ---------- colour helpers ----------
+  function rgb2hsv(r,g,b){ r/=255;g/=255;b/=255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn; let h=0;
+    if(d){ if(mx===r)h=((g-b)/d)%6; else if(mx===g)h=(b-r)/d+2; else h=(r-g)/d+4; h*=60; if(h<0)h+=360;}
+    return {h,s:mx?d/mx:0,v:mx}; }
+  function hsv2rgb(h,s,v){ const c=v*s,x=c*(1-Math.abs((h/60)%2-1)),m=v-c; let r=0,g=0,b=0;
+    if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+    return [(r+m)*255,(g+m)*255,(b+m)*255]; }
+  function hexToRgb(h){ const n=parseInt(h.slice(1),16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}; }
+
+  let targets = [];
+  function chipColor(t){ const [r,g,b]=hsv2rgb(t.h,t.s,t.v); return `rgb(${r|0},${g|0},${b|0})`; }
+  function renderChips(){ const c=$("chips"); c.innerHTML="";
+    if(!targets.length){ c.innerHTML='<span class="note" style="margin:0">no colours — click frame or Add</span>'; return; }
+    targets.forEach((t,i)=>{ const s=document.createElement("span"); s.title="click to remove";
+      s.style.cssText=`width:22px;height:22px;border-radius:5px;border:1px solid var(--line);cursor:pointer;background:${chipColor(t)}`;
+      s.addEventListener("click",()=>{ targets.splice(i,1); renderChips(); }); c.appendChild(s); }); }
+  function addTarget(hsv){ targets.push(hsv); if(targets.length>16)targets.shift(); renderChips(); }
+  $("addColor").addEventListener("click",()=>{ const c=hexToRgb(ui.picker.value); addTarget(rgb2hsv(c.r,c.g,c.b)); });
+  $("clearColors").addEventListener("click",()=>{ targets=[]; renderChips(); });
+  (()=>{ const c=hexToRgb(ui.picker.value); addTarget(rgb2hsv(c.r,c.g,c.b)); })();
+
+  // ---------- file / playback ----------
+  let curObjUrl=null;
+  function startSource(src, isObjUrl){
+    resumeNext = playing;                 // remember whether we were playing, to auto-resume
+    playing=false; $("play").textContent="▶ Play"; Tracker.reset();
+    if(curObjUrl){ URL.revokeObjectURL(curObjUrl); curObjUrl=null; }
+    if(isObjUrl) curObjUrl=src;
+    vid.src=src; vid.load();
+  }
+  $("file").addEventListener("change",e=>{ const f=e.target.files[0]; if(!f)return; startSource(URL.createObjectURL(f), true); });
+  $("examples").addEventListener("change",e=>{ const v=e.target.value; if(!v)return; startSource(v, false); e.target.value=""; });
+  vid.addEventListener("loadedmetadata",()=>{ $("empty").style.display="none"; $("play").disabled=false; $("record").disabled=false;
+    $("srcInfo").textContent=`${vid.videoWidth}×${vid.videoHeight} · ${vid.duration.toFixed(1)}s`; layout(); Tracker.reset(); drawFrame();
+    if(resumeNext){ resumeNext=false; vid.play(); } });
+  function layout(){ const stage=$("stage"), availW=stage.clientWidth-32, availH=stage.clientHeight-32,
+      ar=vid.videoWidth/vid.videoHeight||16/9;
+    let w=availW, h=w/ar; if(h>availH){ h=availH; w=h*ar; }
+    [view,ov].forEach(c=>{c.width=vid.videoWidth;c.height=vid.videoHeight;c.style.width=w+"px";c.style.height=h+"px";}); }
+  window.addEventListener("resize",()=>{ if(vid.videoWidth) layout(); });
+
+  view.addEventListener("click",ev=>{ if(!vid.videoWidth||smartActive)return;
+    const r=view.getBoundingClientRect();
+    const x=Math.floor((ev.clientX-r.left)/r.width*view.width), y=Math.floor((ev.clientY-r.top)/r.height*view.height);
+    const d=vctx.getImageData(x,y,1,1).data; addTarget(rgb2hsv(d[0],d[1],d[2]));
+    ui.picker.value="#"+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,"0")).join(""); });
+
+  let playing=false, resumeNext=false;
+  $("play").addEventListener("click",()=>{ if(vid.paused) vid.play(); else vid.pause(); });
+  vid.addEventListener("play",()=>{playing=true;$("play").textContent="⏸ Pause";loop();});
+  vid.addEventListener("pause",()=>{playing=false;$("play").textContent="▶ Play";});
+  vid.addEventListener("ended",()=>{playing=false;$("play").textContent="▶ Play";});
+
+  function loop(){ if(!playing)return; drawFrame();
+    if("requestVideoFrameCallback" in vid) vid.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
+
+  // ---------- unified tracker (ByteTrack-style two-pass association + per-frame easing) ----------
+  // update() only refreshes each track's TARGET (tx,ty,trad,tbw,tbh) from detections.
+  // ease() glides the rendered state toward the target every frame. No velocity extrapolation,
+  // so tracks never drift when detections are sparse (smart mode) — they just ease to the latest box.
+  const Tracker = {
+    tracks:[], nextId:1,
+    reset(){ this.tracks=[]; this.nextId=1; },
+    ease(a, trail){ for(const t of this.tracks){
+      t.x+=(t.tx-t.x)*a; t.y+=(t.ty-t.y)*a;
+      t.rad+=(t.trad-t.rad)*a; t.bw+=(t.tbw-t.bw)*a; t.bh+=(t.tbh-t.bh)*a;
+      if(trail>0){ t.hist.push({x:t.x,y:t.y}); while(t.hist.length>trail)t.hist.shift(); } else t.hist.length=0;
+    }},
+    update(dets, o){
+      dets.forEach((d,i)=>d._gi=i);
+      const high=dets.filter(d=>d.score>=o.highT), low=dets.filter(d=>d.score<o.highT && d.score>=o.lowT);
+      const matchedT=new Set(), matchedD=new Set();
+      const assoc=(list)=>{
+        const pairs=[];
+        this.tracks.forEach((t,ti)=>{ if(matchedT.has(ti))return;
+          list.forEach(d=>{ if(matchedD.has(d._gi))return;
+            if(o.classLock && t.cls && d.label && t.cls!==d.label) return;
+            const dist=Math.hypot(t.tx-d.cx,t.ty-d.cy); if(dist<=o.linkDist) pairs.push({dist,ti,d}); }); });
+        pairs.sort((a,b)=>a.dist-b.dist);
+        for(const p of pairs){ if(matchedT.has(p.ti)||matchedD.has(p.d._gi))continue;
+          matchedT.add(p.ti); matchedD.add(p.d._gi);
+          const t=this.tracks[p.ti], d=p.d;
+          t.tx=d.cx; t.ty=d.cy; t.trad=d.rad; t.tbw=d.bw; t.tbh=d.bh;
+          if(d.label)t.cls=d.label; t.score=d.score; t.hits++; t.missed=0; t.age++; }
+      };
+      assoc(high); assoc(low);
+      this.tracks.forEach((t,ti)=>{ if(!matchedT.has(ti)){ t.missed++; t.age++; } });
+      this.tracks=this.tracks.filter(t=>t.missed<=o.maxAge);
+      for(const d of high){ if(!matchedD.has(d._gi) && this.tracks.length<o.maxTracks)
+        this.tracks.push({id:this.nextId++, x:d.cx,y:d.cy, tx:d.cx,ty:d.cy,
+          rad:d.rad,trad:d.rad, bw:d.bw,bh:d.bh, tbw:d.bw,tbh:d.bh,
+          cls:d.label||"", score:d.score, hits:1, missed:0, age:0, hist:[]}); }
+    }
+  };
+
+  // ---------- smart mode state ----------
+  let smartActive=false, detecting=false, pendingDets=null, lastDetectAt=0;
+  ui.smart.addEventListener("change", async ()=>{
+    if(ui.smart.checked){
+      const ok = window.__smart.loaded() || await window.__smart.load(ui.model.value, smartStatus);
+      if(!ok){ ui.smart.checked=false; return; }
+      smartActive=true; setMode();
+    } else { smartActive=false; pendingDets=null; setMode(); }
+  });
+  ui.model.addEventListener("change", async ()=>{
+    if(ui.smart.checked){ window.__smart.unload(); await window.__smart.load(ui.model.value, smartStatus); }
+  });
+  function smartStatus(kind,msg){ const el=$("smartStatus"); el.className="note "+(kind==="ok"?"s-ok":kind==="err"?"s-err":"s-load"); el.innerHTML=msg; }
+  function setMode(){
+    $("modePill").textContent = smartActive ? "SMART MODE" : "COLOR MODE";
+    $("smartPill").textContent = smartActive ? "on" : "off";
+    $("smartPill").classList.toggle("on", smartActive);
+    $("colorGroup").classList.toggle("hidden", smartActive);
+    $("hintMsg").textContent = smartActive ? "detecting objects automatically" : "click frame to sample colour";
+    Tracker.reset(); pendingDets=null;
+  }
+
+  // detection runs on its own async cadence, decoupled from rendering
+  async function smartTick(now){
+    if(!smartActive || detecting || !vid.videoWidth) return;
+    if(now - lastDetectAt < +ui.interval.value) return;
+    detecting=true; lastDetectAt=now;
+    const dw=+ui.procW.value, dh=Math.max(2,Math.round(dw*vid.videoHeight/vid.videoWidth));
+    if(det.width!==dw||det.height!==dh){det.width=dw;det.height=dh;}
+    dctx.drawImage(vid,0,0,dw,dh);
+    const id=dctx.getImageData(0,0,dw,dh);
+    try{
+      const raw=await window.__smart.detect(id, +ui.conf.value/100);
+      const sx=view.width/dw, sy=view.height/dh;
+      const want=ui.classes.value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
+      pendingDets=raw.filter(o=>!want.length||want.includes((o.label||"").toLowerCase())).map(o=>{
+        const b=o.box, cx=(b.xmin+b.xmax)/2*sx, cy=(b.ymin+b.ymax)/2*sy;
+        const w=(b.xmax-b.xmin)*sx, h=(b.ymax-b.ymin)*sy;
+        return {cx,cy,rad:Math.max(4,Math.min(w,h)/2),bw:w,bh:h,score:o.score,label:o.label};
+      }).filter(d=>Math.min(d.bw,d.bh)>=+ui.minBox.value).slice(0,+ui.maxT.value);
+      $("detStat").textContent = `det: ${pendingDets.length}`;
+    }catch(e){ smartStatus("err","detect error: "+(e.message||e)); }
+    finally{ detecting=false; }
+  }
+
+  // ---------- main per-frame ----------
+  function drawFrame(){
+    if(!vid.videoWidth) return;
+    const t0=performance.now();
+    vctx.drawImage(vid,0,0,view.width,view.height);
+
+    const o={ linkDist:+ui.linkDist.value, maxAge:+ui.memory.value, alpha:1/(1+(+ui.smooth.value)/20),
+              highT:0.001, lowT:0, classLock:false, maxTracks:+ui.maxT.value, trail:+ui.trail.value };
+    let nDet=0, mask=null, mw=0, mh=0;
+
+    if(smartActive){
+      smartTick(t0);
+      if(pendingDets){
+        const so=Object.assign({},o,{ highT:+ui.conf.value/100, lowT:Math.max(0.05,(+ui.conf.value/100)-0.3), classLock:true });
+        Tracker.update(pendingDets, so); nDet=pendingDets.length; pendingDets=null;
+      }
+    } else {
+      const pw=+ui.procW.value, ph=Math.max(2,Math.round(pw*vid.videoHeight/vid.videoWidth));
+      if(proc.width!==pw||proc.height!==ph){proc.width=pw;proc.height=ph;}
+      pctx.drawImage(vid,0,0,pw,ph);
+      const img=pctx.getImageData(0,0,pw,ph);
+      mask=buildMask(img,pw,ph); mw=pw; mh=ph;
+      const blobs=labelBlobs(mask,pw,ph).filter(b=>b.area>=+ui.minBlob.value).sort((a,b)=>b.area-a.area).slice(0,+ui.maxT.value);
+      const sx=view.width/pw, sy=view.height/ph;
+      const dets=blobs.map(c=>({cx:c.cx*sx,cy:c.cy*sy,rad:Math.max(3,Math.sqrt(c.area)*0.55*sx),
+        bw:(c.maxx-c.minx+1)*sx, bh:(c.maxy-c.miny+1)*sy, score:1,label:"blob"}));
+      nDet=dets.length;
+      Tracker.update(dets, o);
+    }
+    Tracker.ease(o.alpha, o.trail);
+
+    render(mask,mw,mh);
+    $("statTargets").textContent=nDet;
+    $("statTracks").textContent=Tracker.tracks.length;
+    $("statMs").textContent=(performance.now()-t0).toFixed(1);
+  }
+
+  // ---------- colour-mode detection ----------
+  function buildMask(img,w,h){
+    const d=img.data, mask=new Uint8Array(w*h);
+    if(!targets.length) return mask;
+    const ht=+ui.hueTol.value, st=+ui.satTol.value/100, vt=+ui.valTol.value/100;
+    for(let i=0,p=0;i<d.length;i+=4,p++){ const hsv=rgb2hsv(d[i],d[i+1],d[i+2]);
+      for(const t of targets){ let dh=Math.abs(hsv.h-t.h); if(dh>180)dh=360-dh;
+        if(dh<=ht && Math.abs(hsv.s-t.s)<=st && Math.abs(hsv.v-t.v)<=vt){ mask[p]=1; break; } } }
+    return mask;
+  }
+  function labelBlobs(mask,w,h){
+    const seen=new Uint8Array(w*h), blobs=[], stack=new Int32Array(w*h);
+    for(let s=0;s<mask.length;s++){ if(!mask[s]||seen[s])continue;
+      let sp=0; stack[sp++]=s; seen[s]=1; let area=0,sx=0,sy=0,minx=1e9,miny=1e9,maxx=-1,maxy=-1;
+      while(sp){ const p=stack[--sp], x=p%w, y=(p/w)|0; area++; sx+=x; sy+=y;
+        if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y;
+        if(x>0){const n=p-1;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}}
+        if(x<w-1){const n=p+1;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}}
+        if(y>0){const n=p-w;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}}
+        if(y<h-1){const n=p+w;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}} }
+      blobs.push({area,cx:sx/area,cy:sy/area,minx,miny,maxx,maxy}); }
+    return blobs;
+  }
+
+  // ---------- styling ----------
+  function colorFor(t){
+    const by=ui.colorBy.value;
+    if(by==="id"){ const hue=(t.id*47)%360; return `hsl(${hue} 80% 60%)`; }
+    if(by==="class"){ let hsum=0; const s=t.cls||"x"; for(let i=0;i<s.length;i++)hsum=(hsum*31+s.charCodeAt(i))%360; return `hsl(${hsum} 75% 60%)`; }
+    return ui.accent.value;
+  }
+
+  // ---------- overlay ----------
+  function render(mask,mw,mh){
+    octx.clearRect(0,0,ov.width,ov.height);
+    const accent=ui.accent.value;
+
+    if(!smartActive && ui.showMask.checked && mask){
+      const tmp=octx.createImageData(mw,mh), col=hexToRgb(accent);
+      for(let p=0;p<mask.length;p++) if(mask[p]){const o=p*4;tmp.data[o]=col.r;tmp.data[o+1]=col.g;tmp.data[o+2]=col.b;tmp.data[o+3]=120;}
+      const mc=document.createElement("canvas"); mc.width=mw; mc.height=mh; mc.getContext("2d").putImageData(tmp,0,0);
+      octx.imageSmoothingEnabled=false; octx.drawImage(mc,0,0,ov.width,ov.height); octx.imageSmoothingEnabled=true;
+    }
+    view.style.opacity = ui.showVideo.checked ? "1" : "0";
+
+    const live = Tracker.tracks.filter(t => smartActive ? (t.hits>=+ui.minHits.value && t.missed<=+ui.memory.value) : t.missed===0);
+    const lw=+ui.lineW.value, nz=+ui.nodeSz.value, maxEdge=+ui.maxEdge.value;
+
+    // trails
+    if(+ui.trail.value>0){
+      const tw=+ui.trailWidth.value, top=+ui.trailOpacity.value/100, fade=ui.trailFade.checked;
+      octx.lineWidth=tw; octx.lineCap="round";
+      for(const t of live){ const n=t.hist.length; if(n<2)continue; octx.strokeStyle=colorFor(t);
+        if(fade){ for(let i=1;i<n;i++){ octx.globalAlpha=top*(i/n);
+            octx.beginPath(); octx.moveTo(t.hist[i-1].x,t.hist[i-1].y); octx.lineTo(t.hist[i].x,t.hist[i].y); octx.stroke(); } }
+        else { octx.globalAlpha=top; octx.beginPath(); octx.moveTo(t.hist[0].x,t.hist[0].y);
+          for(let i=1;i<n;i++)octx.lineTo(t.hist[i].x,t.hist[i].y); octx.stroke(); } }
+      octx.globalAlpha=1; octx.lineCap="butt"; }
+
+    // edges
+    octx.lineWidth=lw;
+    const lstyle=ui.lineStyle.value, curv=+ui.curv.value;
+    octx.setLineDash(lstyle==="dashed"?[Math.max(4,lw*4),Math.max(3,lw*3)]:[]);
+    for(const [a,b] of buildEdges(live, ui.mode.value)){
+      const A=live[a], B=live[b];
+      if(Math.hypot(A.x-B.x,A.y-B.y)>maxEdge) continue;
+      octx.strokeStyle=colorFor(A);
+      octx.beginPath(); octx.moveTo(A.x,A.y);
+      if(lstyle==="curved"){ const mx=(A.x+B.x)/2,my=(A.y+B.y)/2,dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;
+        octx.quadraticCurveTo(mx-dy/len*curv, my+dx/len*curv, B.x,B.y); }
+      else octx.lineTo(B.x,B.y);
+      octx.stroke();
+    }
+    octx.setLineDash([]);
+
+    // nodes + labels
+    octx.font=(+ui.labelSize.value)+"px ui-monospace,monospace";
+    const shape=ui.nodeShape.value, lmode=ui.labelMode.value,
+          bborder=+ui.boxBorder.value, bfill=+ui.boxFill.value/100, corners=ui.boxCorners.value;
+    for(const t of live){
+      const c=colorFor(t); let r;
+      if(shape==="box"){
+        const w=t.bw||t.rad*2, h=t.bh||t.rad*2, x=t.x-w/2, y=t.y-h/2;
+        if(bfill>0){ octx.globalAlpha=bfill; octx.fillStyle=c; octx.fillRect(x,y,w,h); octx.globalAlpha=1; }
+        octx.lineWidth=bborder; octx.strokeStyle=c;
+        if(corners==="brackets"){ const L=Math.max(6,Math.min(w,h)*0.22); octx.beginPath();
+          octx.moveTo(x,y+L); octx.lineTo(x,y); octx.lineTo(x+L,y);
+          octx.moveTo(x+w-L,y); octx.lineTo(x+w,y); octx.lineTo(x+w,y+L);
+          octx.moveTo(x+w,y+h-L); octx.lineTo(x+w,y+h); octx.lineTo(x+w-L,y+h);
+          octx.moveTo(x+L,y+h); octx.lineTo(x,y+h); octx.lineTo(x,y+h-L); octx.stroke();
+        } else octx.strokeRect(x,y,w,h);
+        r=Math.max(w,h)/2;
+      } else {
+        r=nz+Math.min(10,t.rad*0.4);
+        octx.beginPath(); octx.arc(t.x,t.y,r,0,Math.PI*2); octx.fillStyle=c; octx.globalAlpha=0.22; octx.fill();
+        octx.globalAlpha=1; octx.lineWidth=1.5; octx.strokeStyle=c; octx.stroke();
+        octx.beginPath(); octx.arc(t.x,t.y,2,0,Math.PI*2); octx.fillStyle="#fff"; octx.fill();
+      }
+      if(lmode!=="off"){ octx.fillStyle=c; const xy=`(${t.x|0}, ${t.y|0})`; let lbl="";
+        if(lmode==="id") lbl="#"+t.id;
+        else if(lmode==="class") lbl=(smartActive?t.cls+" ":"")+"#"+t.id;
+        else if(lmode==="xy") lbl=xy;
+        else if(lmode==="idxy") lbl="#"+t.id+" "+xy;
+        octx.fillText(lbl, t.x+r+3, t.y-r-2); }
+    }
+
+    if(recording) compositeForExport();
+  }
+
+  function buildEdges(nodes,mode){
+    const n=nodes.length, E=[]; if(n<2||mode==="none")return E;
+    if(mode==="sequential"){ const ord=nodes.map((_,i)=>i).sort((a,b)=>nodes[a].x-nodes[b].x);
+      for(let i=0;i<ord.length-1;i++)E.push([ord[i],ord[i+1]]); }
+    else if(mode==="star"){ let cx=0,cy=0; nodes.forEach(p=>{cx+=p.x;cy+=p.y;}); cx/=n;cy/=n;
+      let hub=0,bd=Infinity; nodes.forEach((p,i)=>{const d=Math.hypot(p.x-cx,p.y-cy);if(d<bd){bd=d;hub=i;}});
+      for(let i=0;i<n;i++) if(i!==hub)E.push([hub,i]); }
+    else if(mode==="mesh"){ for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)E.push([i,j]); }
+    else if(mode==="mst"){ const inT=new Array(n).fill(false),dist=new Array(n).fill(Infinity),par=new Array(n).fill(-1); dist[0]=0;
+      for(let it=0;it<n;it++){ let u=-1,bd=Infinity; for(let i=0;i<n;i++) if(!inT[i]&&dist[i]<bd){bd=dist[i];u=i;}
+        if(u<0)break; inT[u]=true; if(par[u]>=0)E.push([par[u],u]);
+        for(let v=0;v<n;v++) if(!inT[v]){const d=Math.hypot(nodes[u].x-nodes[v].x,nodes[u].y-nodes[v].y); if(d<dist[v]){dist[v]=d;par[v]=u;}} } }
+    else if(mode==="knn"){ const k=2,seen=new Set();
+      for(let i=0;i<n;i++){ const ds=[]; for(let j=0;j<n;j++) if(j!==i)ds.push([Math.hypot(nodes[i].x-nodes[j].x,nodes[i].y-nodes[j].y),j]);
+        ds.sort((a,b)=>a[0]-b[0]); for(let m=0;m<Math.min(k,ds.length);m++){const j=ds[m][1],key=i<j?i+"-"+j:j+"-"+i; if(!seen.has(key)){seen.add(key);E.push([i,j]);}} } }
+    return E;
+  }
+
+  // ---------- export (MediaRecorder on composite canvas) ----------
+  let recorder=null, recording=false, chunks=[];
+  function compositeForExport(){
+    if(comp.width!==view.width){comp.width=view.width;comp.height=view.height;}
+    cctx.clearRect(0,0,comp.width,comp.height);
+    cctx.fillStyle="#000"; cctx.fillRect(0,0,comp.width,comp.height);
+    if(ui.showVideo.checked) cctx.drawImage(view,0,0);
+    cctx.drawImage(ov,0,0);
+  }
+  $("record").addEventListener("click",()=>{
+    if(recording){ recorder.stop(); return; }
+    if(comp.width!==view.width){comp.width=view.width;comp.height=view.height;}
+    compositeForExport();
+    const stream=comp.captureStream(30); chunks=[];
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":"video/webm";
+    recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8e6});
+    recorder.ondataavailable=e=>{ if(e.data.size)chunks.push(e.data); };
+    recorder.onstop=()=>{ const blob=new Blob(chunks,{type:"video/webm"}); const url=URL.createObjectURL(blob);
+      const a=document.createElement("a"); a.href=url; a.download="constellate-overlay.webm"; a.click(); URL.revokeObjectURL(url);
+      recording=false; $("record").textContent="● Record overlay to WebM"; $("record").classList.remove("primary"); };
+    recorder.start(); recording=true; $("record").textContent="⏹ Stop & save"; $("record").classList.add("primary");
+    if(!playing) vid.play();
+  });
+
+  // ---------- presets (localStorage) ----------
+  const STATE_INPUTS = [...ranges, "mode","colorBy","accent","picker","model","classes",
+                        "nodeShape","boxCorners","lineStyle","labelMode"];
+  const STATE_CHECKS = ["showMask","showVideo","trailFade"];
+  function getState(){ const s={}; STATE_INPUTS.forEach(k=>s[k]=ui[k].value); STATE_CHECKS.forEach(k=>s[k]=ui[k].checked);
+    s.targets=targets.map(t=>({h:t.h,s:t.s,v:t.v})); return s; }
+  function setState(s){ if(!s)return;
+    STATE_INPUTS.forEach(k=>{ if(s[k]!=null){ ui[k].value=s[k]; const v=$(k+"V"); if(v)v.textContent=s[k]; } });
+    STATE_CHECKS.forEach(k=>{ if(s[k]!=null) ui[k].checked=s[k]; });
+    if(s.targets){ targets=s.targets.map(t=>({h:t.h,s:t.s,v:t.v})); renderChips(); } }
+  const DEFAULTS = getState();                                   // captured at load = factory defaults
+  // built-in presets (bundled looks; setState applies only the keys present)
+  const BUILTINS = JSON.parse(`{"MST boxes":{"hueTol":"22","satTol":"45","valTol":"50","procW":"320","minBlob":"20","maxT":"97","linkDist":"240","memory":"10","smooth":"0","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"1.5","trailOpacity":"35","maxEdge":"600","conf":"16","interval":"50","boxBorder":"2","boxFill":"0","curv":"40","mode":"mst","colorBy":"uniform","accent":"#ffffff","picker":"#222364","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"class","showMask":false,"showVideo":true,"trailFade":true,"targets":[{"h":0,"s":0.7490196078431373,"v":1},{"h":239.0909090909091,"s":0.6599999999999999,"v":0.39215686274509803}]},"Dense mesh":{"hueTol":"22","satTol":"45","valTol":"50","procW":"640","minBlob":"20","maxT":"512","linkDist":"10","memory":"11","smooth":"190","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"43","interval":"0","boxBorder":"2","boxFill":"8","curv":"60","labelSize":"11","minBox":"0","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"class","showMask":false,"showVideo":true,"trailFade":true,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]},"Big objects":{"hueTol":"22","satTol":"45","valTol":"50","procW":"440","minBlob":"36","maxT":"101","linkDist":"68","memory":"37","smooth":"218","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"10","interval":"2","boxBorder":"2","boxFill":"0","curv":"60","labelSize":"9","minBox":"180","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"off","showMask":false,"showVideo":false,"trailFade":false,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]},"ID mesh":{"hueTol":"22","satTol":"45","valTol":"50","procW":"440","minBlob":"115","maxT":"324","linkDist":"134","memory":"14","smooth":"80","nodeSz":"3","lineW":"1","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"10","interval":"2","boxBorder":"1","boxFill":"19","curv":"60","labelSize":"8","minBox":"180","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"id","showMask":true,"showVideo":false,"trailFade":false,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]}}`);
+  const PK="constellate-presets";
+  let store;
+  try{ const k="__t"; localStorage.setItem(k,"1"); localStorage.removeItem(k);
+    store={ get:()=>{ try{ return JSON.parse(localStorage.getItem(PK))||{}; }catch{ return {}; } },
+            set:p=>localStorage.setItem(PK, JSON.stringify(p)) };
+  }catch{ let mem={}; store={ get:()=>mem, set:p=>{ mem=p; } }; }   // storage blocked → session-only
+  const loadAll=()=>store.get();
+  const saveAll=p=>store.set(p);
+  function refreshList(sel){
+    const el=$("presetList"), p=loadAll();
+    let html='<option value="">— presets —</option>';
+    html+='<optgroup label="Built-in">'+Object.keys(BUILTINS).map(n=>`<option value="b:${n}"${("b:"+n)===sel?" selected":""}>${n}</option>`).join("")+'</optgroup>';
+    const uk=Object.keys(p);
+    if(uk.length) html+='<optgroup label="Saved">'+uk.map(n=>`<option value="u:${n}"${("u:"+n)===sel?" selected":""}>${n}</option>`).join("")+'</optgroup>';
+    el.innerHTML=html;
+  }
+  function resolvePreset(v){ if(!v)return null; if(v.startsWith("b:"))return BUILTINS[v.slice(2)]; if(v.startsWith("u:"))return loadAll()[v.slice(2)]; return loadAll()[v]; }
+  $("presetSave").addEventListener("click",()=>{ const name=($("presetName").value||"").trim();
+    if(!name){ $("presetName").focus(); return; } const p=loadAll(); p[name]=getState(); saveAll(p); refreshList("u:"+name); });
+  $("presetLoad").addEventListener("click",()=>{ const s=resolvePreset($("presetList").value); if(s) setState(s); });
+  $("presetList").addEventListener("change",()=>{ const s=resolvePreset($("presetList").value); if(s) setState(s); });
+  $("presetDelete").addEventListener("click",()=>{ const n=$("presetList").value; if(n&&n.startsWith("u:")){ const p=loadAll(); delete p[n.slice(2)]; saveAll(p); refreshList(); } });
+  $("presetReset").addEventListener("click",()=>{ setState(DEFAULTS); $("presetList").value=""; });
+  refreshList();
+})();
+</script>
+</body>
+</html>
