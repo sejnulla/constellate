@@ -6,243 +6,359 @@
 <title>Constellate — tracking overlay studio</title>
 <style>
   :root{
-    --bg:#000; --panel:#0b0b0b; --panel-2:#161616; --line:#2a2a2a;
-    --text:#f0f0f0; --muted:#888; --accent:#fff; --accent-2:#bbb; --warn:#ccc;
+    color-scheme: dark;
+    --bg:#000; --window:#1c1c1e; --sidebar:rgba(36,36,38,.78); --card:rgba(255,255,255,.045);
+    --sep:rgba(255,255,255,.08); --ctl:rgba(255,255,255,.1); --ctl-hover:rgba(255,255,255,.16); --track:rgba(255,255,255,.16);
+    --text:rgba(255,255,255,.9); --muted:rgba(235,235,245,.55); --faint:rgba(235,235,245,.32);
+    --blue:#0a84ff; --green:#30d158; --orange:#ff9f0a; --red:#ff453a;
+    --r:10px; --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
-  body{background:var(--bg);color:var(--text);font:13px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;height:100vh}
-  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:12px}
-  header h1{font-size:15px;margin:0;letter-spacing:.3px}
-  header .sub{color:var(--muted);font-size:12px}
-  header .hint{color:var(--accent)}
-  main{flex:1;display:flex;min-height:0}
-  #stage{flex:1;position:relative;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
-  #wrap{position:relative;line-height:0}
-  #view{display:block;cursor:crosshair}
-  #overlay{position:absolute;inset:0;pointer-events:none}
-  #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);flex-direction:column;gap:10px;text-align:center;padding:24px}
-  #empty strong{color:var(--text);font-weight:600}
-  aside{width:312px;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:14px}
-  .group{margin-bottom:18px}
-  .group h2{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
-  label.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}
-  label.row span.val{color:var(--accent);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
-  input[type=range]{width:128px;accent-color:var(--accent)}
-  select,button,input[type=text]{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit}
-  select{width:140px}
-  input[type=text]{width:140px}
+  body{background:var(--bg);color:var(--text);font:12.5px/1.45 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+  .app{display:flex;height:100vh}
+  .hidden{display:none!important}
+
+  /* ---------- stage ---------- */
+  #stage{flex:1;position:relative;min-width:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    background:radial-gradient(120% 90% at 50% 40%,#111 0%,#000 70%)}
+  #wrap{position:relative;line-height:0;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 .5px rgba(255,255,255,.08)}
+  #wrap.off{display:none}
+  #vid{display:block;cursor:crosshair;background:#000;transition:opacity .2s}
+  #overlay{position:absolute;left:0;top:0;pointer-events:none}
+  #hintMsg{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:999px;font-size:11.5px;color:var(--muted);
+    background:rgba(30,30,32,.6);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:.5px solid var(--sep);white-space:nowrap}
+  #empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px}
+  #empty .glyph{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:var(--card);border:.5px solid var(--sep)}
+  #empty h3{margin:0;font-size:17px;font-weight:600;letter-spacing:-.2px}
+  #empty p{margin:0;color:var(--muted);max-width:360px}
+  #empty .ex{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:460px}
+  #drop{position:absolute;inset:12px;border:2px dashed var(--blue);border-radius:16px;background:rgba(10,132,255,.08);display:none;
+    align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--blue);pointer-events:none}
+  #stage.dragging #drop{display:flex}
+
+  /* floating transport bar */
+  .hud{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:min(720px,calc(100% - 32px));display:flex;align-items:center;gap:10px;
+    padding:8px 14px 8px 8px;border-radius:14px;background:rgba(30,30,32,.62);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8);
+    border:.5px solid rgba(255,255,255,.1);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  .hud .time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:11.5px;min-width:34px;text-align:center}
+  .hud #seek{flex:1;width:auto;min-width:60px}
+  .hud .stats{display:flex;gap:12px;color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .hud .stats b{color:var(--muted);font-weight:500}
+  button.icon{width:34px;height:34px;padding:0;border-radius:10px;display:grid;place-items:center;background:var(--ctl);flex:none}
+  button.icon svg{width:14px;height:14px;fill:currentColor}
+
+  /* ---------- sidebar ---------- */
+  aside{width:304px;flex:none;display:flex;flex-direction:column;background:var(--sidebar);
+    backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-left:.5px solid rgba(255,255,255,.1)}
+  .side-head{display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:.5px solid var(--sep)}
+  .side-head h1{font-size:14px;margin:0;font-weight:600;letter-spacing:-.1px}
+  .side-head h1 span{color:var(--muted);font-weight:400}
+  .side-scroll{flex:1;overflow-y:auto;padding:8px 10px 24px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+  details.group{border-radius:var(--r);margin:6px 0;background:var(--card);border:.5px solid var(--sep)}
+  details.group>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-weight:600;font-size:12px;user-select:none}
+  details.group>summary::-webkit-details-marker{display:none}
+  details.group>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--faint);border-bottom:1.5px solid var(--faint);transform:rotate(-45deg);transition:transform .15s;margin:0 2px 0 1px}
+  details.group[open]>summary::before{transform:rotate(45deg) translate(-1px,-1px)}
+  details.group>summary .modepill{margin-left:auto}
+  .body{padding:2px 12px 10px}
+  .row{display:grid;grid-template-columns:86px 1fr 34px;align-items:center;gap:8px;min-height:28px}
+  .row>span:first-child{color:var(--muted)}
+  .row.sel>select,.row.sel>.segmented,.row.sel>input[type=text],.row.sel>.inline{grid-column:2/4}
+  .row.toggle{grid-template-columns:1fr auto}
+  .row.toggle>span:first-child{color:var(--text)}
+  .row .val{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;font-size:11.5px}
+  .note{font-size:11px;color:var(--faint);margin:4px 0 2px;line-height:1.4}
+  .btnrow{display:flex;gap:6px;margin:6px 0}
+  .btnrow>button{flex:1}
+  .sub-sep{height:.5px;background:var(--sep);margin:8px 0}
+
+  /* ---------- controls (macOS-style) ---------- */
+  button,select,input[type=text]{font:inherit;color:var(--text);background:var(--ctl);border:0;border-radius:7px;padding:5px 10px;min-height:26px;
+    box-shadow:inset 0 .5px 0 rgba(255,255,255,.08),0 .5px 1px rgba(0,0,0,.3);transition:background .12s}
   button{cursor:pointer}
-  button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+  button:hover:not(:disabled),select:hover{background:var(--ctl-hover)}
+  button:active:not(:disabled){filter:brightness(1.2)}
+  button:disabled{opacity:.4;cursor:default}
+  button.primary{background:var(--blue);color:#fff}
+  button.primary:hover:not(:disabled){background:#2b95ff}
   button.wide{width:100%}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .swatch{width:22px;height:22px;border-radius:5px;border:1px solid var(--line)}
-  .controls-bottom{border-top:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .controls-bottom .stat{color:var(--muted);font-variant-numeric:tabular-nums}
-  .controls-bottom .stat b{color:var(--text)}
-  .pill{padding:2px 8px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--muted)}
-  .checkrow{display:flex;align-items:center;gap:8px;margin:7px 0}
-  .note{font-size:11px;color:var(--muted);margin-top:6px}
-  input[type=file]{font-size:12px;width:100%}
-  fieldset{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:0}
-  fieldset legend{color:var(--muted);padding:0 6px;font-size:11px}
-  .modepill{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
-  .modepill.on{color:#000;background:var(--accent);border-color:var(--accent)}
-  #smartStatus{font-size:11px}
-  .s-load{color:var(--warn)} .s-ok{color:var(--accent)} .s-err{color:var(--accent-2)}
-  .hidden{display:none}
+  button.rec.on{background:var(--red);color:#fff}
+  :focus-visible{outline:2px solid rgba(10,132,255,.7);outline-offset:1px}
+  select{appearance:none;-webkit-appearance:none;width:100%;padding-right:26px;cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12'%3E%3Cpath d='M1 4.5 4 1.5 7 4.5M1 7.5 4 10.5 7 7.5' fill='none' stroke='%23ffffffb0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center}
+  select option,select optgroup{background:#2c2c2e;color:#fff}
+  input[type=text]{width:100%;cursor:text}
+  input[type=text]::placeholder{color:var(--faint)}
+
+  .segmented{display:flex;padding:2px;border-radius:8px;background:rgba(0,0,0,.25);box-shadow:inset 0 0 0 .5px var(--sep)}
+  .segmented button{flex:1;min-height:22px;padding:2px 6px;background:transparent;box-shadow:none;border-radius:6px;color:var(--muted);font-size:11.5px}
+  .segmented button:hover:not(.on){background:transparent;color:var(--text)}
+  .segmented button.on{background:rgba(255,255,255,.18);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35),inset 0 .5px 0 rgba(255,255,255,.12)}
+
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:18px;margin:0;background:transparent;cursor:pointer;--p:50%}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--blue) var(--p),var(--track) var(--p))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-5.5px;border-radius:50%;background:#f5f5f7;
+    box-shadow:0 .5px 1px rgba(0,0,0,.5),0 2px 5px rgba(0,0,0,.35);transition:transform .1s}
+  input[type=range]:active::-webkit-slider-thumb{transform:scale(1.1)}
+  input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
+  input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue)}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;background:#f5f5f7;box-shadow:0 .5px 1px rgba(0,0,0,.5),0 2px 5px rgba(0,0,0,.35)}
+  input[type=range]:disabled{opacity:.4;cursor:default}
+
+  input[type=checkbox]{appearance:none;-webkit-appearance:none;width:30px;height:18px;margin:0;border-radius:9px;background:var(--track);position:relative;cursor:pointer;flex:none;transition:background .18s}
+  input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .18s cubic-bezier(.3,.7,.4,1)}
+  input[type=checkbox]:checked{background:var(--green)}
+  input[type=checkbox]:checked::after{transform:translateX(12px)}
+
+  input[type=color]{-webkit-appearance:none;appearance:none;width:26px;height:22px;padding:0;border:0;border-radius:6px;background:none;cursor:pointer}
+  input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  input[type=color]::-webkit-color-swatch{border:.5px solid rgba(255,255,255,.25);border-radius:6px}
+  input[type=color]::-moz-color-swatch{border:.5px solid rgba(255,255,255,.25);border-radius:6px}
+  .inline{display:flex;gap:6px;align-items:center}
+  .inline>button{flex:1}
+
+  #chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+  .chip{width:22px;height:22px;border-radius:6px;border:.5px solid rgba(255,255,255,.25);cursor:pointer;position:relative;transition:transform .1s}
+  .chip:hover{transform:scale(1.08)}
+  .chip:hover::after{content:"×";position:absolute;inset:0;display:grid;place-items:center;font-size:14px;color:#fff;text-shadow:0 0 3px #000}
+
+  .modepill{font-size:10px;font-weight:600;letter-spacing:.3px;padding:2px 8px;border-radius:999px;background:var(--ctl);color:var(--muted)}
+  .modepill.on{background:rgba(48,209,88,.2);color:var(--green)}
+  .side-head .modepill{margin-left:auto}
+  #srcInfo{font-variant-numeric:tabular-nums}
+  #smartStatus.s-load{color:var(--orange)} #smartStatus.s-ok{color:var(--green)} #smartStatus.s-err{color:var(--red)}
+
+  @media (max-width:760px){
+    body{overflow:auto}
+    .app{flex-direction:column;height:auto;min-height:100vh}
+    #stage{min-height:62vh;flex:none}
+    aside{width:auto;border-left:0;border-top:.5px solid var(--sep)}
+    .side-scroll{overflow:visible}
+    .hud .stats{display:none}
+    .hud{bottom:10px;width:calc(100% - 20px)}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Constell<span class="hint">ate</span></h1>
-  <span class="sub">color &amp; object tracking → procedural overlays · runs entirely in your browser</span>
-  <span class="modepill" id="modePill" style="margin-left:auto">COLOR MODE</span>
-</header>
-
-<main>
-  <div id="stage">
-    <div id="wrap">
-      <canvas id="view"></canvas>
+<div class="app">
+  <main id="stage">
+    <div id="wrap" class="off">
+      <video id="vid" playsinline loop crossorigin="anonymous"></video>
       <canvas id="overlay"></canvas>
     </div>
     <div id="empty">
-      <strong>Load a video to begin</strong>
-      <span>Color mode: click a colored region to set the target. Smart mode: detects objects automatically.</span>
+      <div class="glyph"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.5" stroke-linecap="round"><circle cx="5" cy="6" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="12" cy="13" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="19" cy="18" r="2"/><path d="M6.7 7 10.6 11.6M16.4 6.2 13.3 11.5M10.5 14.2 7.4 17.7M13.7 14 17.4 17"/></svg></div>
+      <h3>Drop a video to begin</h3>
+      <p>Colour mode: click a coloured region to track it. Smart mode detects objects automatically. Everything runs locally.</p>
+      <div class="ex">
+        <button data-src="examples/weavy.mp4">Weavy</button>
+        <button data-src="examples/loop.mp4">Loop</button>
+        <button data-src="examples/01.mp4">01</button>
+        <button data-src="examples/generative-art-studio.mp4">Generative Art Studio</button>
+        <button data-src="examples/video-1080p.mp4">1080p</button>
+        <button class="primary" id="chooseFile">Choose file…</button>
+      </div>
     </div>
-  </div>
+    <div id="drop">Drop video to load</div>
+    <div id="hintMsg" class="hidden">click frame to sample colour</div>
+    <div class="hud">
+      <button id="play" class="icon primary" disabled title="Play (Space)"></button>
+      <span class="time" id="tCur">0:00</span>
+      <input id="seek" type="range" min="0" max="1000" value="0" step="1" disabled aria-label="Seek">
+      <span class="time" id="tDur">0:00</span>
+      <div class="stats">
+        <span><b id="statFps">0</b> fps</span>
+        <span><b id="statTracks">0</b> tracks</span>
+        <span><b id="statTargets">0</b> det</span>
+        <span><b id="statMs">0</b> ms</span>
+        <span id="detStat"></span>
+      </div>
+    </div>
+  </main>
 
   <aside>
-    <div class="group">
-      <h2>Source</h2>
-      <input id="file" type="file" accept="video/*" />
-      <label class="row" style="margin-top:8px"><span>Examples</span>
-        <select id="examples">
-          <option value="">— load example —</option>
-          <option value="examples/weavy.mp4">Weavy</option>
-          <option value="examples/loop.mp4">Loop</option>
-          <option value="examples/01.mp4">01</option>
-          <option value="examples/generative-art-studio.mp4">Generative Art Studio</option>
-          <option value="examples/video-1080p.mp4">Video 1080p</option>
-        </select>
-      </label>
-      <div class="note">Pick an example or load your own. Everything runs locally — nothing is uploaded.</div>
+    <div class="side-head">
+      <h1>Constellate <span>studio</span></h1>
+      <span class="modepill" id="modePill">COLOR</span>
     </div>
+    <div class="side-scroll">
 
-    <div class="group">
-      <h2>Presets</h2>
-      <label class="row"><span>Saved</span>
-        <select id="presetList"><option value="">— presets —</option></select>
-      </label>
-      <div style="display:flex;gap:6px;margin:6px 0">
-        <button id="presetLoad">Load</button>
-        <button id="presetDelete">Delete</button>
-        <button id="presetReset">Reset defaults</button>
+    <details class="group" open data-k="source">
+      <summary>Source</summary>
+      <div class="body">
+        <input id="file" type="file" accept="video/*" hidden />
+        <div class="btnrow"><button id="fileBtn">Open video…</button></div>
+        <label class="row sel"><span>Examples</span>
+          <select id="examples">
+            <option value="">Choose…</option>
+            <option value="examples/weavy.mp4">Weavy</option>
+            <option value="examples/loop.mp4">Loop</option>
+            <option value="examples/01.mp4">01</option>
+            <option value="examples/generative-art-studio.mp4">Generative Art Studio</option>
+            <option value="examples/video-1080p.mp4">Video 1080p</option>
+          </select>
+        </label>
+        <div class="note"><span id="srcInfo">No source</span> · drag a file onto the stage, Space to play</div>
       </div>
-      <label class="row"><span>Name</span><input id="presetName" type="text" placeholder="my look"></label>
-      <button id="presetSave" class="wide">Save current settings</button>
-      <div class="note">Presets are stored locally in your browser.</div>
-    </div>
+    </details>
 
-    <div class="group" id="colorGroup">
-      <h2>Target colours</h2>
-      <div id="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-      <label class="row"><span>Add colour</span>
-        <span style="display:flex;gap:6px;align-items:center">
-          <input id="picker" type="color" value="#ff4040" />
-          <button id="addColor">Add</button>
-        </span>
-      </label>
-      <button id="clearColors" class="wide" style="margin-bottom:6px">Clear colours</button>
-      <div class="note">Click the frame to sample &amp; add a colour. All colours are tracked together.</div>
-      <label class="row"><span>Hue tol</span><input id="hueTol" type="range" min="2" max="90" value="22"><span class="val" id="hueTolV">22</span></label>
-      <label class="row"><span>Sat tol</span><input id="satTol" type="range" min="5" max="100" value="45"><span class="val" id="satTolV">45</span></label>
-      <label class="row"><span>Val tol</span><input id="valTol" type="range" min="5" max="100" value="50"><span class="val" id="valTolV">50</span></label>
-      <label class="row"><span>Min blob</span><input id="minBlob" type="range" min="3" max="400" value="20"><span class="val" id="minBlobV">20</span></label>
-      <div class="checkrow"><input id="showMask" type="checkbox"><label for="showMask">Show detection mask</label></div>
-    </div>
+    <details class="group" data-k="presets">
+      <summary>Presets</summary>
+      <div class="body">
+        <label class="row sel"><span>Preset</span>
+          <select id="presetList"><option value="">— presets —</option></select>
+        </label>
+        <div class="btnrow">
+          <button id="presetLoad">Load</button>
+          <button id="presetDelete">Delete</button>
+          <button id="presetReset">Reset</button>
+        </div>
+        <div class="sub-sep"></div>
+        <label class="row sel"><span>Name</span><input id="presetName" type="text" placeholder="my look"></label>
+        <div class="btnrow"><button id="presetSave" class="wide">Save current settings</button></div>
+        <div class="note">Presets are stored locally in your browser. Your last settings are restored on launch.</div>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Smart mode <span class="modepill" id="smartPill">off</span></h2>
-      <fieldset>
-        <legend>semantic object tracking</legend>
-        <div class="checkrow"><input id="smart" type="checkbox"><label for="smart"><b>Detect objects</b> (YOLO-family + ByteTrack)</label></div>
-        <div id="smartStatus" class="note">Off. Toggling loads a detection model (~25&nbsp;MB) into the browser.</div>
-        <label class="row"><span>Model</span>
+    <details class="group" open data-k="colors" id="colorGroup">
+      <summary>Target colours</summary>
+      <div class="body">
+        <div id="chips"></div>
+        <label class="row sel"><span>Add colour</span>
+          <span class="inline"><input id="picker" type="color" value="#ff4040" /><button id="addColor">Add</button><button id="clearColors">Clear</button></span>
+        </label>
+        <label class="row"><span>Hue tol</span><input id="hueTol" type="range" min="2" max="90" value="22"><span class="val" id="hueTolV">22</span></label>
+        <label class="row"><span>Sat tol</span><input id="satTol" type="range" min="5" max="100" value="45"><span class="val" id="satTolV">45</span></label>
+        <label class="row"><span>Val tol</span><input id="valTol" type="range" min="5" max="100" value="50"><span class="val" id="valTolV">50</span></label>
+        <label class="row"><span>Min blob</span><input id="minBlob" type="range" min="3" max="400" value="20"><span class="val" id="minBlobV">20</span></label>
+        <label class="row toggle"><span>Show detection mask</span><input id="showMask" type="checkbox"></label>
+        <div class="note">Click the frame to sample a colour. All colours are tracked together.</div>
+      </div>
+    </details>
+
+    <details class="group" open data-k="smart">
+      <summary>Smart mode <span class="modepill" id="smartPill">off</span></summary>
+      <div class="body">
+        <label class="row toggle"><span>Detect objects <span style="color:var(--faint)">· YOLO + ByteTrack</span></span><input id="smart" type="checkbox"></label>
+        <div id="smartStatus" class="note">Loads a detection model (~25&nbsp;MB) into the browser.</div>
+        <label class="row sel"><span>Model</span>
           <select id="model">
             <option value="Xenova/yolos-tiny">YOLOS-tiny (fast)</option>
             <option value="Xenova/yolos-small">YOLOS-small (better)</option>
             <option value="Xenova/detr-resnet-50">DETR-R50 (accurate)</option>
           </select>
         </label>
-        <label class="row"><span>Classes</span><input id="classes" type="text" placeholder="all (e.g. person,car)"></label>
+        <label class="row sel"><span>Classes</span><input id="classes" type="text" placeholder="all (e.g. person, car)"></label>
         <label class="row"><span>Confidence</span><input id="conf" type="range" min="10" max="90" value="40"><span class="val" id="confV">40</span></label>
         <label class="row"><span>Detect every</span><input id="interval" type="range" min="0" max="800" step="1" value="150"><span class="val" id="intervalV">150</span></label>
         <label class="row"><span>Min box (px)</span><input id="minBox" type="range" min="0" max="300" value="0"><span class="val" id="minBoxV">0</span></label>
         <label class="row"><span>Confirm hits</span><input id="minHits" type="range" min="1" max="10" value="2"><span class="val" id="minHitsV">2</span></label>
-        <div class="note">"Detect every" = ms between detections (0 = as fast as the worker allows). Tracks ease toward the latest detection between runs.</div>
-      </fieldset>
-    </div>
+        <div class="note">"Detect every" = ms between detections (0 = as fast as the worker allows).</div>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Quality &amp; tracking</h2>
-      <label class="row"><span>Proc width</span><input id="procW" type="range" min="160" max="640" step="40" value="320"><span class="val" id="procWV">320</span></label>
-      <label class="row"><span>Max targets</span><input id="maxT" type="range" min="2" max="512" value="24"><span class="val" id="maxTV">24</span></label>
-      <label class="row"><span>Link distance</span><input id="linkDist" type="range" min="10" max="240" value="70"><span class="val" id="linkDistV">70</span></label>
-      <label class="row"><span>Memory</span><input id="memory" type="range" min="0" max="40" value="10"><span class="val" id="memoryV">10</span></label>
-      <label class="row"><span>Smoothing</span><input id="smooth" type="range" min="0" max="1000" value="20"><span class="val" id="smoothV">20</span></label>
-    </div>
+    <details class="group" open data-k="quality">
+      <summary>Quality &amp; tracking</summary>
+      <div class="body">
+        <label class="row"><span>Proc width</span><input id="procW" type="range" min="160" max="640" step="40" value="320"><span class="val" id="procWV">320</span></label>
+        <label class="row"><span>Max targets</span><input id="maxT" type="range" min="2" max="512" value="24"><span class="val" id="maxTV">24</span></label>
+        <label class="row"><span>Link distance</span><input id="linkDist" type="range" min="10" max="240" value="70"><span class="val" id="linkDistV">70</span></label>
+        <label class="row"><span>Memory</span><input id="memory" type="range" min="0" max="40" value="10"><span class="val" id="memoryV">10</span></label>
+        <label class="row"><span>Smoothing</span><input id="smooth" type="range" min="0" max="1000" value="20"><span class="val" id="smoothV">20</span></label>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Connections</h2>
-      <label class="row"><span>Layout</span>
-        <select id="mode">
-          <option value="none">None (nodes only)</option>
-          <option value="sequential">Sequential</option>
-          <option value="star">Star (hub)</option>
-          <option value="mesh">Full mesh</option>
-          <option value="mst" selected>Min. spanning tree</option>
-          <option value="knn">Nearest neighbours (k=2)</option>
-        </select>
-      </label>
-      <label class="row"><span>Line style</span>
-        <select id="lineStyle">
-          <option value="straight" selected>Straight</option>
-          <option value="curved">Curved</option>
-          <option value="dashed">Dashed</option>
-        </select>
-      </label>
-      <label class="row"><span>Curvature</span><input id="curv" type="range" min="0" max="120" value="40"><span class="val" id="curvV">40</span></label>
-      <label class="row"><span>Max edge len</span><input id="maxEdge" type="range" min="20" max="600" step="10" value="600"><span class="val" id="maxEdgeV">600</span></label>
-      <label class="row"><span>Line width</span><input id="lineW" type="range" min="1" max="6" value="1.5" step="0.5"><span class="val" id="lineWV">1.5</span></label>
-    </div>
+    <details class="group" open data-k="edges">
+      <summary>Connections</summary>
+      <div class="body">
+        <label class="row sel"><span>Layout</span>
+          <select id="mode">
+            <option value="none">None (nodes only)</option>
+            <option value="sequential">Sequential</option>
+            <option value="star">Star (hub)</option>
+            <option value="mesh">Full mesh</option>
+            <option value="mst" selected>Min. spanning tree</option>
+            <option value="knn">Nearest neighbours (k=2)</option>
+          </select>
+        </label>
+        <label class="row sel" data-when="mode!=none"><span>Line style</span>
+          <select id="lineStyle" class="seg">
+            <option value="straight" selected>Straight</option>
+            <option value="curved">Curved</option>
+            <option value="dashed">Dashed</option>
+          </select>
+        </label>
+        <label class="row" data-when="lineStyle=curved"><span>Curvature</span><input id="curv" type="range" min="0" max="120" value="40"><span class="val" id="curvV">40</span></label>
+        <label class="row" data-when="mode!=none"><span>Max edge len</span><input id="maxEdge" type="range" min="20" max="600" step="10" value="600"><span class="val" id="maxEdgeV">600</span></label>
+        <label class="row" data-when="mode!=none"><span>Line width</span><input id="lineW" type="range" min="1" max="6" value="1.5" step="0.5"><span class="val" id="lineWV">1.5</span></label>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Nodes</h2>
-      <label class="row"><span>Shape</span>
-        <select id="nodeShape">
-          <option value="circle" selected>Circle</option>
-          <option value="box">Bounding box</option>
-        </select>
-      </label>
-      <label class="row"><span>Node size</span><input id="nodeSz" type="range" min="1" max="20" value="5"><span class="val" id="nodeSzV">5</span></label>
-      <label class="row"><span>Box border</span><input id="boxBorder" type="range" min="1" max="6" value="2" step="0.5"><span class="val" id="boxBorderV">2</span></label>
-      <label class="row"><span>Box corners</span>
-        <select id="boxCorners">
-          <option value="full" selected>Full rectangle</option>
-          <option value="brackets">Segmented (brackets)</option>
-        </select>
-      </label>
-      <label class="row"><span>Box fill</span><input id="boxFill" type="range" min="0" max="80" value="0"><span class="val" id="boxFillV">0</span></label>
-    </div>
+    <details class="group" open data-k="nodes">
+      <summary>Nodes</summary>
+      <div class="body">
+        <label class="row sel"><span>Shape</span>
+          <select id="nodeShape" class="seg">
+            <option value="circle" selected>Circle</option>
+            <option value="box">Box</option>
+          </select>
+        </label>
+        <label class="row" data-when="nodeShape=circle"><span>Node size</span><input id="nodeSz" type="range" min="1" max="20" value="5"><span class="val" id="nodeSzV">5</span></label>
+        <label class="row sel" data-when="nodeShape=box"><span>Corners</span>
+          <select id="boxCorners" class="seg">
+            <option value="full" selected>Full</option>
+            <option value="brackets">Brackets</option>
+          </select>
+        </label>
+        <label class="row" data-when="nodeShape=box"><span>Box border</span><input id="boxBorder" type="range" min="1" max="6" value="2" step="0.5"><span class="val" id="boxBorderV">2</span></label>
+        <label class="row" data-when="nodeShape=box"><span>Box fill</span><input id="boxFill" type="range" min="0" max="80" value="0"><span class="val" id="boxFillV">0</span></label>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Style</h2>
-      <label class="row"><span>Colour by</span>
-        <select id="colorBy">
-          <option value="uniform">Uniform (accent)</option>
-          <option value="id">Per target (ID)</option>
-          <option value="class">Per class</option>
-        </select>
-      </label>
-      <label class="row"><span>Accent</span><input id="accent" type="color" value="#ffffff"></label>
-      <label class="row"><span>Label</span>
-        <select id="labelMode">
-          <option value="off">Off</option>
-          <option value="id">ID</option>
-          <option value="class" selected>Class + ID</option>
-          <option value="xy">XY coordinates</option>
-          <option value="idxy">ID + XY</option>
-        </select>
-      </label>
-      <label class="row"><span>Label size</span><input id="labelSize" type="range" min="8" max="48" value="11"><span class="val" id="labelSizeV">11</span></label>
-      <label class="row"><span>Trails</span><input id="trail" type="range" min="0" max="120" value="0"><span class="val" id="trailV">0</span></label>
-      <label class="row"><span>Trail width</span><input id="trailWidth" type="range" min="0.5" max="8" value="1.5" step="0.5"><span class="val" id="trailWidthV">1.5</span></label>
-      <label class="row"><span>Trail opacity</span><input id="trailOpacity" type="range" min="5" max="100" value="35"><span class="val" id="trailOpacityV">35</span></label>
-      <div class="checkrow"><input id="trailFade" type="checkbox" checked><label for="trailFade">Fade trail toward tail</label></div>
-      <div class="checkrow"><input id="showVideo" type="checkbox" checked><label for="showVideo">Show video under overlay</label></div>
-    </div>
+    <details class="group" open data-k="style">
+      <summary>Style</summary>
+      <div class="body">
+        <label class="row sel"><span>Colour by</span>
+          <select id="colorBy">
+            <option value="uniform">Uniform (accent)</option>
+            <option value="id">Per target (ID)</option>
+            <option value="class">Per class</option>
+          </select>
+        </label>
+        <label class="row sel" data-when="colorBy=uniform"><span>Accent</span><span class="inline"><input id="accent" type="color" value="#ffffff"></span></label>
+        <label class="row sel"><span>Label</span>
+          <select id="labelMode">
+            <option value="off">Off</option>
+            <option value="id">ID</option>
+            <option value="class" selected>Class + ID</option>
+            <option value="xy">XY coordinates</option>
+            <option value="idxy">ID + XY</option>
+          </select>
+        </label>
+        <label class="row" data-when="labelMode!=off"><span>Label size</span><input id="labelSize" type="range" min="8" max="48" value="11"><span class="val" id="labelSizeV">11</span></label>
+        <div class="sub-sep"></div>
+        <label class="row"><span>Trails</span><input id="trail" type="range" min="0" max="120" value="0"><span class="val" id="trailV">0</span></label>
+        <label class="row" data-when="trail!=0"><span>Trail width</span><input id="trailWidth" type="range" min="0.5" max="8" value="1.5" step="0.5"><span class="val" id="trailWidthV">1.5</span></label>
+        <label class="row" data-when="trail!=0"><span>Trail opacity</span><input id="trailOpacity" type="range" min="5" max="100" value="35"><span class="val" id="trailOpacityV">35</span></label>
+        <label class="row toggle" data-when="trail!=0"><span>Fade trail toward tail</span><input id="trailFade" type="checkbox" checked></label>
+        <div class="sub-sep"></div>
+        <label class="row toggle"><span>Show video under overlay</span><input id="showVideo" type="checkbox" checked></label>
+      </div>
+    </details>
 
-    <div class="group">
-      <h2>Export</h2>
-      <button id="record" class="wide" disabled>● Record overlay to WebM</button>
-      <div class="note">Composites video + overlay and saves a .webm clip.</div>
+    <details class="group" open data-k="export">
+      <summary>Export</summary>
+      <div class="body">
+        <div class="btnrow"><button id="record" class="wide rec" disabled>● Record overlay to WebM</button></div>
+        <div class="note">Composites video + overlay at full resolution and saves a .webm clip.</div>
+      </div>
+    </details>
+
     </div>
   </aside>
-</main>
-
-<div class="controls-bottom">
-  <button id="play" class="primary" disabled>▶ Play</button>
-  <span class="pill" id="srcInfo">no source</span>
-  <span class="stat">targets: <b id="statTargets">0</b></span>
-  <span class="stat">tracks: <b id="statTracks">0</b></span>
-  <span class="stat">proc: <b id="statMs">0</b> ms</span>
-  <span class="stat" id="detStat"></span>
-  <span class="stat" style="margin-left:auto" id="hintMsg">click frame to sample colour</span>
 </div>
-
-<video id="vid" playsinline loop crossorigin="anonymous" style="display:none"></video>
 
 <!-- Smart detector: runs detection in a background Web Worker so the UI never blocks -->
 <script>
@@ -314,24 +430,52 @@
   "use strict";
   const $ = id => document.getElementById(id);
 
+  // The <video> element is displayed directly (GPU-composited); canvases are only used for
+  // small CPU reads (detection / colour sampling) and the overlay itself.
   const vid = $("vid");
-  const view = $("view"), vctx = view.getContext("2d", { willReadFrequently:true });
   const ov = $("overlay"), octx = ov.getContext("2d");
-  const proc = document.createElement("canvas");
-  const pctx = proc.getContext("2d", { willReadFrequently:true });
-  const det = document.createElement("canvas");                 // smart-mode detection buffer
-  const dctx = det.getContext("2d", { willReadFrequently:true });
-  const comp = document.createElement("canvas");                // export composite
-  const cctx = comp.getContext("2d");
+  const mk = rf => { const c=document.createElement("canvas"); return [c, c.getContext("2d", rf?{ willReadFrequently:true }:undefined)]; };
+  const [proc, pctx] = mk(true);                                  // colour-mode processing buffer
+  const [det, dctx]  = mk(true);                                  // smart-mode detection buffer
+  const [comp, cctx] = mk(false);                                 // export composite
+  const [maskC, mctx] = mk(false);                                // detection-mask preview
+  const [samp, sctx] = mk(true); samp.width=samp.height=1;        // 1px colour sampler
+  let VW=0, VH=0, ovK=1;                                          // video size, overlay px per video px
 
   // ---------- UI wiring ----------
   const ui = {};
   const ranges = ["hueTol","satTol","valTol","procW","minBlob","maxT","linkDist","memory","smooth",
                   "nodeSz","lineW","trail","trailWidth","trailOpacity","maxEdge","conf","interval","boxBorder","boxFill","curv",
                   "labelSize","minBox","minHits"];
-  ranges.forEach(k => { ui[k]=$(k); const v=$(k+"V"); const s=()=>v.textContent=ui[k].value; ui[k].addEventListener("input",s); s(); });
+  const paintRange = el => el.style.setProperty("--p", ((el.value-el.min)/(el.max-el.min)*100)+"%");
+  ranges.forEach(k => { ui[k]=$(k); const v=$(k+"V"); const s=()=>{ v.textContent=ui[k].value; paintRange(ui[k]); }; ui[k].addEventListener("input",s); s(); });
   ["mode","colorBy","showMask","showVideo","accent","picker","smart","model","classes",
    "nodeShape","boxCorners","lineStyle","labelMode","trailFade"].forEach(k=>ui[k]=$(k));
+
+  // segmented controls mirror a hidden <select>, so presets / getState keep working on .value
+  const segs=[];
+  document.querySelectorAll("select.seg").forEach(sel=>{
+    const box=document.createElement("div"); box.className="segmented";
+    [...sel.options].forEach(o=>{ const b=document.createElement("button"); b.type="button"; b.textContent=o.textContent; b.dataset.v=o.value;
+      b.addEventListener("click",e=>{ e.preventDefault(); if(sel.value===o.value)return; sel.value=o.value; sel.dispatchEvent(new Event("change",{bubbles:true})); });
+      box.appendChild(b); });
+    sel.after(box); sel.hidden=true; segs.push([sel,box]);
+  });
+  function syncSegs(){ for(const [sel,box] of segs) for(const b of box.children) b.classList.toggle("on", b.dataset.v===sel.value); }
+  // contextual rows: data-when="key=a|b" or "key!=a"
+  function updateVisibility(){ document.querySelectorAll("[data-when]").forEach(el=>{
+    const m=el.dataset.when.match(/^(\w+)(!?=)(.*)$/), list=m[3].split("|"), has=list.includes(String(ui[m[1]].value));
+    el.classList.toggle("hidden", m[2]==="=" ? !has : has); }); }
+  function refreshUI(){ ranges.forEach(k=>paintRange(ui[k])); syncSegs(); updateVisibility(); }
+  const aside=document.querySelector("aside");
+  const onSetting=()=>{ updateVisibility(); syncSegs(); dirty=true; needsRender=true; kick(); };
+  aside.addEventListener("input",onSetting); aside.addEventListener("change",onSetting);
+
+  // remember which sections are collapsed
+  const UK="constellate-ui";
+  let uiState={}; try{ uiState=JSON.parse(localStorage.getItem(UK))||{}; }catch{}
+  document.querySelectorAll("details.group").forEach(d=>{ const k=d.dataset.k; if(k in uiState) d.open=uiState[k];
+    d.addEventListener("toggle",()=>{ uiState[k]=d.open; try{ localStorage.setItem(UK, JSON.stringify(uiState)); }catch{} }); });
 
   // ---------- colour helpers ----------
   function rgb2hsv(r,g,b){ r/=255;g/=255;b/=255; const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn; let h=0;
@@ -345,83 +489,129 @@
   let targets = [];
   function chipColor(t){ const [r,g,b]=hsv2rgb(t.h,t.s,t.v); return `rgb(${r|0},${g|0},${b|0})`; }
   function renderChips(){ const c=$("chips"); c.innerHTML="";
-    if(!targets.length){ c.innerHTML='<span class="note" style="margin:0">no colours — click frame or Add</span>'; return; }
-    targets.forEach((t,i)=>{ const s=document.createElement("span"); s.title="click to remove";
-      s.style.cssText=`width:22px;height:22px;border-radius:5px;border:1px solid var(--line);cursor:pointer;background:${chipColor(t)}`;
-      s.addEventListener("click",()=>{ targets.splice(i,1); renderChips(); }); c.appendChild(s); }); }
-  function addTarget(hsv){ targets.push(hsv); if(targets.length>16)targets.shift(); renderChips(); }
-  $("addColor").addEventListener("click",()=>{ const c=hexToRgb(ui.picker.value); addTarget(rgb2hsv(c.r,c.g,c.b)); });
-  $("clearColors").addEventListener("click",()=>{ targets=[]; renderChips(); });
-  (()=>{ const c=hexToRgb(ui.picker.value); addTarget(rgb2hsv(c.r,c.g,c.b)); })();
+    if(!targets.length){ c.innerHTML='<span class="note" style="margin:0">No colours yet — click the frame or Add</span>'; return; }
+    targets.forEach((t,i)=>{ const s=document.createElement("span"); s.className="chip"; s.title="Remove"; s.style.background=chipColor(t);
+      s.addEventListener("click",()=>{ targets.splice(i,1); renderChips(); dirty=true; kick(); }); c.appendChild(s); }); }
+  function addTarget(hsv){ targets.push(hsv); if(targets.length>16)targets.shift(); renderChips(); dirty=true; kick(); }
+  $("addColor").addEventListener("click",e=>{ e.preventDefault(); const c=hexToRgb(ui.picker.value); addTarget(rgb2hsv(c.r,c.g,c.b)); });
+  $("clearColors").addEventListener("click",e=>{ e.preventDefault(); targets=[]; renderChips(); dirty=true; kick(); });
+  (()=>{ const c=hexToRgb(ui.picker.value); targets.push(rgb2hsv(c.r,c.g,c.b)); renderChips(); })();
 
   // ---------- file / playback ----------
-  let curObjUrl=null;
+  let curObjUrl=null, playing=false, resumeNext=false;
   function startSource(src, isObjUrl){
     resumeNext = playing;                 // remember whether we were playing, to auto-resume
-    playing=false; $("play").textContent="▶ Play"; Tracker.reset();
+    playing=false; setPlayUI(); Tracker.reset();
     if(curObjUrl){ URL.revokeObjectURL(curObjUrl); curObjUrl=null; }
     if(isObjUrl) curObjUrl=src;
     vid.src=src; vid.load();
   }
-  $("file").addEventListener("change",e=>{ const f=e.target.files[0]; if(!f)return; startSource(URL.createObjectURL(f), true); });
+  const openFile=f=>{ if(f && f.type.startsWith("video")) startSource(URL.createObjectURL(f), true); };
+  $("file").addEventListener("change",e=>{ openFile(e.target.files[0]); e.target.value=""; });
+  $("fileBtn").addEventListener("click",()=>$("file").click());
+  $("chooseFile").addEventListener("click",()=>$("file").click());
+  document.querySelectorAll("#empty [data-src]").forEach(b=>b.addEventListener("click",()=>startSource(b.dataset.src,false)));
   $("examples").addEventListener("change",e=>{ const v=e.target.value; if(!v)return; startSource(v, false); e.target.value=""; });
-  vid.addEventListener("loadedmetadata",()=>{ $("empty").style.display="none"; $("play").disabled=false; $("record").disabled=false;
-    $("srcInfo").textContent=`${vid.videoWidth}×${vid.videoHeight} · ${vid.duration.toFixed(1)}s`; layout(); Tracker.reset(); drawFrame();
-    if(resumeNext){ resumeNext=false; vid.play(); } });
-  function layout(){ const stage=$("stage"), availW=stage.clientWidth-32, availH=stage.clientHeight-32,
-      ar=vid.videoWidth/vid.videoHeight||16/9;
-    let w=availW, h=w/ar; if(h>availH){ h=availH; w=h*ar; }
-    [view,ov].forEach(c=>{c.width=vid.videoWidth;c.height=vid.videoHeight;c.style.width=w+"px";c.style.height=h+"px";}); }
-  window.addEventListener("resize",()=>{ if(vid.videoWidth) layout(); });
+  const stage=$("stage"); let dragDepth=0;
+  stage.addEventListener("dragenter",e=>{ e.preventDefault(); dragDepth++; stage.classList.add("dragging"); });
+  stage.addEventListener("dragleave",()=>{ if(--dragDepth<=0){ dragDepth=0; stage.classList.remove("dragging"); } });
+  stage.addEventListener("dragover",e=>e.preventDefault());
+  stage.addEventListener("drop",e=>{ e.preventDefault(); dragDepth=0; stage.classList.remove("dragging"); openFile(e.dataTransfer.files[0]); });
 
-  view.addEventListener("click",ev=>{ if(!vid.videoWidth||smartActive)return;
-    const r=view.getBoundingClientRect();
-    const x=Math.floor((ev.clientX-r.left)/r.width*view.width), y=Math.floor((ev.clientY-r.top)/r.height*view.height);
-    const d=vctx.getImageData(x,y,1,1).data; addTarget(rgb2hsv(d[0],d[1],d[2]));
+  const fmt=s=>{ s=Math.max(0,s|0); return (s/60|0)+":"+String(s%60).padStart(2,"0"); };
+  vid.addEventListener("loadedmetadata",()=>{
+    VW=vid.videoWidth; VH=vid.videoHeight;
+    $("empty").classList.add("hidden"); $("wrap").classList.remove("off"); $("hintMsg").classList.remove("hidden");
+    $("play").disabled=false; $("record").disabled=false; $("seek").disabled=false;
+    $("srcInfo").textContent=`${VW}×${VH} · ${vid.duration.toFixed(1)}s`; $("tDur").textContent=fmt(vid.duration);
+    layout(); Tracker.reset(); dirty=true; kick(); armRVFC();
+    if(resumeNext){ resumeNext=false; vid.play(); } });
+  vid.addEventListener("loadeddata",()=>{ dirty=true; kick(); });
+  vid.addEventListener("seeked",()=>{ newFrame=true; kick(); });
+
+  function layout(){ if(!VW)return;
+    const narrow=innerWidth<760, padX=narrow?12:36, padTop=narrow?12:52, padBot=narrow?64:84;
+    const availW=stage.clientWidth-padX*2, availH=stage.clientHeight-padTop-padBot, ar=VW/VH;
+    let w=availW, h=w/ar; if(h>availH){ h=availH; w=h*ar; }
+    w=Math.max(1,Math.floor(w)); h=Math.max(1,Math.floor(h));
+    vid.style.width=ov.style.width=w+"px"; vid.style.height=ov.style.height=h+"px";
+    $("wrap").style.marginTop=(padTop-padBot)+"px";
+    // overlay renders at display resolution (crisp, cheap); full video resolution while recording
+    ovK = recording ? 1 : Math.min(1, w*(devicePixelRatio||1)/VW);
+    ov.width=Math.round(VW*ovK); ov.height=Math.round(VH*ovK);
+    needsRender=true; kick();
+  }
+  new ResizeObserver(()=>layout()).observe(stage);
+
+  vid.addEventListener("click",ev=>{ if(!VW||smartActive)return;
+    const r=vid.getBoundingClientRect();
+    const x=Math.min(VW-1,Math.floor((ev.clientX-r.left)/r.width*VW)), y=Math.min(VH-1,Math.floor((ev.clientY-r.top)/r.height*VH));
+    sctx.drawImage(vid,x,y,1,1,0,0,1,1); const d=sctx.getImageData(0,0,1,1).data; addTarget(rgb2hsv(d[0],d[1],d[2]));
     ui.picker.value="#"+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,"0")).join(""); });
 
-  let playing=false, resumeNext=false;
-  $("play").addEventListener("click",()=>{ if(vid.paused) vid.play(); else vid.pause(); });
-  vid.addEventListener("play",()=>{playing=true;$("play").textContent="⏸ Pause";loop();});
-  vid.addEventListener("pause",()=>{playing=false;$("play").textContent="▶ Play";});
-  vid.addEventListener("ended",()=>{playing=false;$("play").textContent="▶ Play";});
-
-  function loop(){ if(!playing)return; drawFrame();
-    if("requestVideoFrameCallback" in vid) vid.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
+  const PLAY_SVG='<svg viewBox="0 0 14 14"><path d="M3 1.6v10.8c0 .5.5.8.9.5l8.4-5.4c.4-.2.4-.8 0-1L3.9 1.1c-.4-.3-.9 0-.9.5z"/></svg>',
+        PAUSE_SVG='<svg viewBox="0 0 14 14"><rect x="2.5" y="1.5" width="3.2" height="11" rx="1"/><rect x="8.3" y="1.5" width="3.2" height="11" rx="1"/></svg>';
+  function setPlayUI(){ $("play").innerHTML=playing?PAUSE_SVG:PLAY_SVG; $("play").title=(playing?"Pause":"Play")+" (Space)"; }
+  setPlayUI();
+  const togglePlay=()=>{ if(!VW)return; if(vid.paused) vid.play(); else vid.pause(); };
+  $("play").addEventListener("click",togglePlay);
+  vid.addEventListener("play",()=>{ playing=true; setPlayUI(); kick(); });
+  vid.addEventListener("pause",()=>{ playing=false; setPlayUI(); });
+  vid.addEventListener("ended",()=>{ playing=false; setPlayUI(); });
+  document.addEventListener("keydown",e=>{
+    if(e.target.matches("input[type=text],select,textarea")) return;
+    if(e.code==="Space"){ e.preventDefault(); togglePlay(); }
+    else if(VW && (e.code==="ArrowLeft"||e.code==="ArrowRight") && !e.target.matches("input[type=range]")){
+      e.preventDefault(); vid.currentTime=Math.max(0,Math.min(vid.duration,vid.currentTime+(e.code==="ArrowLeft"?-1:1)*(e.shiftKey?5:1/30))); }
+  });
+  const seek=$("seek"); let scrubbing=false;
+  seek.addEventListener("pointerdown",()=>scrubbing=true);
+  addEventListener("pointerup",()=>scrubbing=false);
+  seek.addEventListener("input",()=>{ paintRange(seek); if(vid.duration) vid.currentTime=seek.value/1000*vid.duration; });
 
   // ---------- unified tracker (ByteTrack-style two-pass association + per-frame easing) ----------
   // update() only refreshes each track's TARGET (tx,ty,trad,tbw,tbh) from detections.
-  // ease() glides the rendered state toward the target every frame. No velocity extrapolation,
+  // ease() glides the rendered state toward the target every display frame. No velocity extrapolation,
   // so tracks never drift when detections are sparse (smart mode) — they just ease to the latest box.
   const Tracker = {
     tracks:[], nextId:1,
     reset(){ this.tracks=[]; this.nextId=1; },
-    ease(a, trail){ for(const t of this.tracks){
-      t.x+=(t.tx-t.x)*a; t.y+=(t.ty-t.y)*a;
-      t.rad+=(t.trad-t.rad)*a; t.bw+=(t.tbw-t.bw)*a; t.bh+=(t.tbh-t.bh)*a;
-      if(trail>0){ t.hist.push({x:t.x,y:t.y}); while(t.hist.length>trail)t.hist.shift(); } else t.hist.length=0;
-    }},
+    ease(a){ let moving=false;
+      for(const t of this.tracks){
+        const dx=t.tx-t.x, dy=t.ty-t.y;
+        if(dx*dx+dy*dy>0.0025 || Math.abs(t.tbw-t.bw)>0.05 || Math.abs(t.tbh-t.bh)>0.05) moving=true;
+        t.x+=dx*a; t.y+=dy*a; t.rad+=(t.trad-t.rad)*a; t.bw+=(t.tbw-t.bw)*a; t.bh+=(t.tbh-t.bh)*a; }
+      return moving; },
+    pushHist(trail){ for(const t of this.tracks){
+      if(trail>0){ t.hist.push(t.x,t.y); if(t.hist.length>trail*2) t.hist.splice(0,t.hist.length-trail*2); } else t.hist.length=0; } },
     update(dets, o){
-      dets.forEach((d,i)=>d._gi=i);
+      const nD=dets.length; dets.forEach((d,i)=>d._gi=i);
       const high=dets.filter(d=>d.score>=o.highT), low=dets.filter(d=>d.score<o.highT && d.score>=o.lowT);
-      const matchedT=new Set(), matchedD=new Set();
+      const matchedT=new Uint8Array(this.tracks.length), matchedD=new Uint8Array(nD);
+      const cell=Math.max(8,o.linkDist), L2=o.linkDist*o.linkDist;
       const assoc=(list)=>{
+        if(!list.length) return;
+        // spatial hash: only compare tracks against detections in neighbouring cells
+        const grid=new Map();
+        for(const d of list){ if(matchedD[d._gi])continue; const k=Math.floor(d.cx/cell)*73856093 ^ Math.floor(d.cy/cell)*19349663;
+          const b=grid.get(k); if(b)b.push(d); else grid.set(k,[d]); }
         const pairs=[];
-        this.tracks.forEach((t,ti)=>{ if(matchedT.has(ti))return;
-          list.forEach(d=>{ if(matchedD.has(d._gi))return;
-            if(o.classLock && t.cls && d.label && t.cls!==d.label) return;
-            const dist=Math.hypot(t.tx-d.cx,t.ty-d.cy); if(dist<=o.linkDist) pairs.push({dist,ti,d}); }); });
+        this.tracks.forEach((t,ti)=>{ if(matchedT[ti])return;
+          const gx=Math.floor(t.tx/cell), gy=Math.floor(t.ty/cell);
+          for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){ const b=grid.get((gx+ox)*73856093 ^ (gy+oy)*19349663); if(!b)continue;
+            for(const d of b){ if(o.classLock && t.cls && d.label && t.cls!==d.label) continue;
+              const dx=t.tx-d.cx, dy=t.ty-d.cy, dd=dx*dx+dy*dy; if(dd<=L2) pairs.push({dist:dd,ti,d}); } } });
         pairs.sort((a,b)=>a.dist-b.dist);
-        for(const p of pairs){ if(matchedT.has(p.ti)||matchedD.has(p.d._gi))continue;
-          matchedT.add(p.ti); matchedD.add(p.d._gi);
+        for(const p of pairs){ if(matchedT[p.ti]||matchedD[p.d._gi])continue;
+          matchedT[p.ti]=1; matchedD[p.d._gi]=1;
           const t=this.tracks[p.ti], d=p.d;
           t.tx=d.cx; t.ty=d.cy; t.trad=d.rad; t.tbw=d.bw; t.tbh=d.bh;
           if(d.label)t.cls=d.label; t.score=d.score; t.hits++; t.missed=0; t.age++; }
       };
       assoc(high); assoc(low);
-      this.tracks.forEach((t,ti)=>{ if(!matchedT.has(ti)){ t.missed++; t.age++; } });
+      this.tracks.forEach((t,ti)=>{ if(!matchedT[ti]){ t.missed++; t.age++; } });
       this.tracks=this.tracks.filter(t=>t.missed<=o.maxAge);
-      for(const d of high){ if(!matchedD.has(d._gi) && this.tracks.length<o.maxTracks)
+      for(const d of high){ if(!matchedD[d._gi] && this.tracks.length<o.maxTracks)
         this.tracks.push({id:this.nextId++, x:d.cx,y:d.cy, tx:d.cx,ty:d.cy,
           rad:d.rad,trad:d.rad, bw:d.bw,bh:d.bh, tbw:d.bw,tbh:d.bh,
           cls:d.label||"", score:d.score, hits:1, missed:0, age:0, hist:[]}); }
@@ -429,7 +619,7 @@
   };
 
   // ---------- smart mode state ----------
-  let smartActive=false, detecting=false, pendingDets=null, lastDetectAt=0;
+  let smartActive=false, detecting=false, pendingDets=null, lastDetectAt=0, forceSmart=false;
   ui.smart.addEventListener("change", async ()=>{
     if(ui.smart.checked){
       const ok = window.__smart.loaded() || await window.__smart.load(ui.model.value, smartStatus);
@@ -440,91 +630,125 @@
   ui.model.addEventListener("change", async ()=>{
     if(ui.smart.checked){ window.__smart.unload(); await window.__smart.load(ui.model.value, smartStatus); }
   });
-  function smartStatus(kind,msg){ const el=$("smartStatus"); el.className="note "+(kind==="ok"?"s-ok":kind==="err"?"s-err":"s-load"); el.innerHTML=msg; }
+  function smartStatus(kind,msg){ const el=$("smartStatus"); el.className="note "+(kind==="ok"?"s-ok":kind==="err"?"s-err":"s-load"); el.textContent=msg; }
   function setMode(){
-    $("modePill").textContent = smartActive ? "SMART MODE" : "COLOR MODE";
+    $("modePill").textContent = smartActive ? "SMART" : "COLOR";
+    $("modePill").classList.toggle("on", smartActive);
     $("smartPill").textContent = smartActive ? "on" : "off";
     $("smartPill").classList.toggle("on", smartActive);
     $("colorGroup").classList.toggle("hidden", smartActive);
     $("hintMsg").textContent = smartActive ? "detecting objects automatically" : "click frame to sample colour";
-    Tracker.reset(); pendingDets=null;
+    vid.style.cursor = smartActive ? "default" : "crosshair";
+    Tracker.reset(); pendingDets=null; lastMask=null; dirty=true; kick();
   }
 
   // detection runs on its own async cadence, decoupled from rendering
   async function smartTick(now){
-    if(!smartActive || detecting || !vid.videoWidth) return;
-    if(now - lastDetectAt < +ui.interval.value) return;
-    detecting=true; lastDetectAt=now;
-    const dw=+ui.procW.value, dh=Math.max(2,Math.round(dw*vid.videoHeight/vid.videoWidth));
+    if(!smartActive || detecting || !VW) return;
+    if(!forceSmart && (!playing || now - lastDetectAt < +ui.interval.value)) return;
+    forceSmart=false; detecting=true; lastDetectAt=now;
+    const dw=+ui.procW.value, dh=Math.max(2,Math.round(dw*VH/VW));
     if(det.width!==dw||det.height!==dh){det.width=dw;det.height=dh;}
     dctx.drawImage(vid,0,0,dw,dh);
     const id=dctx.getImageData(0,0,dw,dh);
     try{
       const raw=await window.__smart.detect(id, +ui.conf.value/100);
-      const sx=view.width/dw, sy=view.height/dh;
+      const sx=VW/dw, sy=VH/dh;
       const want=ui.classes.value.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
       pendingDets=raw.filter(o=>!want.length||want.includes((o.label||"").toLowerCase())).map(o=>{
         const b=o.box, cx=(b.xmin+b.xmax)/2*sx, cy=(b.ymin+b.ymax)/2*sy;
         const w=(b.xmax-b.xmin)*sx, h=(b.ymax-b.ymin)*sy;
         return {cx,cy,rad:Math.max(4,Math.min(w,h)/2),bw:w,bh:h,score:o.score,label:o.label};
       }).filter(d=>Math.min(d.bw,d.bh)>=+ui.minBox.value).slice(0,+ui.maxT.value);
-      $("detStat").textContent = `det: ${pendingDets.length}`;
+      $("detStat").textContent = `det ${pendingDets.length}`;
     }catch(e){ smartStatus("err","detect error: "+(e.message||e)); }
-    finally{ detecting=false; }
+    finally{ detecting=false; kick(); }
   }
 
-  // ---------- main per-frame ----------
-  function drawFrame(){
-    if(!vid.videoWidth) return;
+  // ---------- frame loop ----------
+  // Rendering runs on requestAnimationFrame (display refresh) so easing is smooth at 60/120 Hz;
+  // detection only runs when the video presents a new frame or a setting changes.
+  let rafId=0, newFrame=false, dirty=true, needsRender=true, lastNow=0, lastVT=-1, rvfcArmed=false, nDet=0, lastMask=null;
+  const hasRVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  function armRVFC(){ if(!hasRVFC||rvfcArmed)return; rvfcArmed=true;
+    vid.requestVideoFrameCallback(()=>{ rvfcArmed=false; newFrame=true; kick(); armRVFC(); }); }
+  function kick(){ if(!rafId) rafId=requestAnimationFrame(tick); }
+  let statFrames=0, statWork=0, statAt=0, lastSeekPaint=0;
+  function tick(now){
+    rafId=0; if(!VW || vid.readyState<2) return;
+    const dt=Math.min(100, lastNow ? now-lastNow : 16.7); lastNow=now;
     const t0=performance.now();
-    vctx.drawImage(vid,0,0,view.width,view.height);
-
-    const o={ linkDist:+ui.linkDist.value, maxAge:+ui.memory.value, alpha:1/(1+(+ui.smooth.value)/20),
-              highT:0.001, lowT:0, classLock:false, maxTracks:+ui.maxT.value, trail:+ui.trail.value };
-    let nDet=0, mask=null, mw=0, mh=0;
-
-    if(smartActive){
-      smartTick(t0);
-      if(pendingDets){
-        const so=Object.assign({},o,{ highT:+ui.conf.value/100, lowT:Math.max(0.05,(+ui.conf.value/100)-0.3), classLock:true });
-        Tracker.update(pendingDets, so); nDet=pendingDets.length; pendingDets=null;
-      }
-    } else {
-      const pw=+ui.procW.value, ph=Math.max(2,Math.round(pw*vid.videoHeight/vid.videoWidth));
-      if(proc.width!==pw||proc.height!==ph){proc.width=pw;proc.height=ph;}
-      pctx.drawImage(vid,0,0,pw,ph);
-      const img=pctx.getImageData(0,0,pw,ph);
-      mask=buildMask(img,pw,ph); mw=pw; mh=ph;
-      const blobs=labelBlobs(mask,pw,ph).filter(b=>b.area>=+ui.minBlob.value).sort((a,b)=>b.area-a.area).slice(0,+ui.maxT.value);
-      const sx=view.width/pw, sy=view.height/ph;
-      const dets=blobs.map(c=>({cx:c.cx*sx,cy:c.cy*sy,rad:Math.max(3,Math.sqrt(c.area)*0.55*sx),
-        bw:(c.maxx-c.minx+1)*sx, bh:(c.maxy-c.miny+1)*sy, score:1,label:"blob"}));
-      nDet=dets.length;
-      Tracker.update(dets, o);
+    if(!hasRVFC && vid.currentTime!==lastVT){ lastVT=vid.currentTime; newFrame=true; }
+    const trail=+ui.trail.value;
+    let stepped=false;
+    if(newFrame||dirty){
+      newFrame=false; dirty=false; stepped=true;
+      if(smartActive) forceSmart = forceSmart || !playing;
+      else { detectColour(); Tracker.pushHist(trail); }
     }
-    Tracker.ease(o.alpha, o.trail);
-
-    render(mask,mw,mh);
-    $("statTargets").textContent=nDet;
-    $("statTracks").textContent=Tracker.tracks.length;
-    $("statMs").textContent=(performance.now()-t0).toFixed(1);
+    if(smartActive){
+      smartTick(now);
+      if(pendingDets){
+        const so={ ...trackOpts(), highT:+ui.conf.value/100, lowT:Math.max(0.05,(+ui.conf.value/100)-0.3), classLock:true };
+        Tracker.update(pendingDets, so); nDet=pendingDets.length; pendingDets=null; Tracker.pushHist(trail); stepped=true;
+      }
+    }
+    // smoothing is defined per 30 fps video frame; normalise for the actual display frame time
+    const base=1/(1+(+ui.smooth.value)/20), a=1-Math.pow(1-base, dt/33.333);
+    const moving=Tracker.ease(a);
+    if(stepped||moving||needsRender||recording){ needsRender=false; render(); statFrames++; statWork+=performance.now()-t0; }
+    if(now-lastSeekPaint>200 && !scrubbing && vid.duration){ lastSeekPaint=now;
+      seek.value=Math.round(vid.currentTime/vid.duration*1000); paintRange(seek); $("tCur").textContent=fmt(vid.currentTime); }
+    if(now-statAt>=500){ const el=now-statAt;
+      $("statFps").textContent=statAt?Math.round(statFrames*1000/el):0;
+      $("statMs").textContent=statFrames?(statWork/statFrames).toFixed(1):"0";
+      $("statTargets").textContent=nDet; $("statTracks").textContent=Tracker.tracks.length;
+      statFrames=0; statWork=0; statAt=now; }
+    if(playing||moving||recording||(!hasRVFC&&!vid.paused)) kick();
+    else if(statFrames) setTimeout(kick,520);                     // flush the last stats tick once idle
   }
+  const trackOpts=()=>({ linkDist:+ui.linkDist.value, maxAge:+ui.memory.value, highT:0.001, lowT:0, classLock:false, maxTracks:+ui.maxT.value });
 
   // ---------- colour-mode detection ----------
-  function buildMask(img,w,h){
-    const d=img.data, mask=new Uint8Array(w*h);
-    if(!targets.length) return mask;
-    const ht=+ui.hueTol.value, st=+ui.satTol.value/100, vt=+ui.valTol.value/100;
-    for(let i=0,p=0;i<d.length;i+=4,p++){ const hsv=rgb2hsv(d[i],d[i+1],d[i+2]);
-      for(const t of targets){ let dh=Math.abs(hsv.h-t.h); if(dh>180)dh=360-dh;
-        if(dh<=ht && Math.abs(hsv.s-t.s)<=st && Math.abs(hsv.v-t.v)<=vt){ mask[p]=1; break; } } }
-    return mask;
+  let maskBuf=null, seenBuf=null, stackBuf=null, maskImg=null;
+  function detectColour(){
+    const pw=+ui.procW.value, ph=Math.max(2,Math.round(pw*VH/VW)), n=pw*ph;
+    if(proc.width!==pw||proc.height!==ph){ proc.width=pw; proc.height=ph; }
+    if(!maskBuf||maskBuf.length!==n){ maskBuf=new Uint8Array(n); seenBuf=new Uint8Array(n); stackBuf=new Int32Array(n); }
+    pctx.drawImage(vid,0,0,pw,ph);
+    buildMask(pctx.getImageData(0,0,pw,ph).data, n);
+    const blobs=labelBlobs(pw,ph).filter(b=>b.area>=+ui.minBlob.value).sort((a,b)=>b.area-a.area).slice(0,+ui.maxT.value);
+    const sx=VW/pw, sy=VH/ph;
+    const dets=blobs.map(c=>({cx:c.cx*sx,cy:c.cy*sy,rad:Math.max(3,Math.sqrt(c.area)*0.55*sx),
+      bw:(c.maxx-c.minx+1)*sx, bh:(c.maxy-c.miny+1)*sy, score:1,label:"blob"}));
+    nDet=dets.length; lastMask={w:pw,h:ph};
+    Tracker.update(dets, trackOpts());
   }
-  function labelBlobs(mask,w,h){
-    const seen=new Uint8Array(w*h), blobs=[], stack=new Int32Array(w*h);
+  // HSV threshold, allocation-free: cheap S/V rejects first, hue only computed when needed
+  function buildMask(d,n){
+    const mask=maskBuf; mask.fill(0);
+    const nt=targets.length; if(!nt) return;
+    const ht=+ui.hueTol.value, st=+ui.satTol.value/100, vt=+ui.valTol.value/100;
+    const TH=new Float32Array(nt), TS=new Float32Array(nt), TV=new Float32Array(nt);
+    targets.forEach((t,k)=>{ TH[k]=t.h; TS[k]=t.s; TV[k]=t.v; });
+    for(let i=0,p=0;p<n;i+=4,p++){
+      const r=d[i], g=d[i+1], b=d[i+2];
+      const mx=r>g?(r>b?r:b):(g>b?g:b), mn=r<g?(r<b?r:b):(g<b?g:b), dd=mx-mn;
+      const v=mx/255, s=mx?dd/mx:0; let h=-1;
+      for(let k=0;k<nt;k++){
+        const ds=s-TS[k], dv=v-TV[k];
+        if(ds>st||ds<-st||dv>vt||dv<-vt) continue;
+        if(h<0){ if(!dd) h=0; else { if(mx===r) h=((g-b)/dd)%6; else if(mx===g) h=(b-r)/dd+2; else h=(r-g)/dd+4; h*=60; if(h<0)h+=360; } }
+        let dh=h-TH[k]; if(dh<0)dh=-dh; if(dh>180)dh=360-dh;
+        if(dh<=ht){ mask[p]=1; break; }
+      }
+    }
+  }
+  function labelBlobs(w,h){
+    const mask=maskBuf, seen=seenBuf, stack=stackBuf, blobs=[]; seen.fill(0);
     for(let s=0;s<mask.length;s++){ if(!mask[s]||seen[s])continue;
       let sp=0; stack[sp++]=s; seen[s]=1; let area=0,sx=0,sy=0,minx=1e9,miny=1e9,maxx=-1,maxy=-1;
-      while(sp){ const p=stack[--sp], x=p%w, y=(p/w)|0; area++; sx+=x; sy+=y;
+      while(sp){ const p=stack[--sp], y=(p/w)|0, x=p-y*w; area++; sx+=x; sy+=y;
         if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y;
         if(x>0){const n=p-1;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}}
         if(x<w-1){const n=p+1;if(mask[n]&&!seen[n]){seen[n]=1;stack[sp++]=n;}}
@@ -541,79 +765,98 @@
     if(by==="class"){ let hsum=0; const s=t.cls||"x"; for(let i=0;i<s.length;i++)hsum=(hsum*31+s.charCodeAt(i))%360; return `hsl(${hsum} 75% 60%)`; }
     return ui.accent.value;
   }
+  const groupBy=(items,key)=>{ const m=new Map(); for(const it of items){ const k=key(it), b=m.get(k); if(b)b.push(it); else m.set(k,[it]); } return m; };
 
   // ---------- overlay ----------
-  function render(mask,mw,mh){
-    octx.clearRect(0,0,ov.width,ov.height);
+  // Everything is batched: one path + one stroke per colour (and per alpha band for faded trails).
+  function render(){
+    octx.setTransform(1,0,0,1,0,0); octx.clearRect(0,0,ov.width,ov.height);
+    octx.setTransform(ovK,0,0,ovK,0,0);
     const accent=ui.accent.value;
 
-    if(!smartActive && ui.showMask.checked && mask){
-      const tmp=octx.createImageData(mw,mh), col=hexToRgb(accent);
-      for(let p=0;p<mask.length;p++) if(mask[p]){const o=p*4;tmp.data[o]=col.r;tmp.data[o+1]=col.g;tmp.data[o+2]=col.b;tmp.data[o+3]=120;}
-      const mc=document.createElement("canvas"); mc.width=mw; mc.height=mh; mc.getContext("2d").putImageData(tmp,0,0);
-      octx.imageSmoothingEnabled=false; octx.drawImage(mc,0,0,ov.width,ov.height); octx.imageSmoothingEnabled=true;
+    if(!smartActive && ui.showMask.checked && lastMask && maskBuf){
+      const {w,h}=lastMask;
+      if(maskC.width!==w||maskC.height!==h){ maskC.width=w; maskC.height=h; maskImg=null; }
+      if(!maskImg) maskImg=mctx.createImageData(w,h);
+      const px=new Uint32Array(maskImg.data.buffer), col=hexToRgb(accent), on=(120<<24)|(col.b<<16)|(col.g<<8)|col.r;
+      for(let p=0;p<px.length;p++) px[p]=maskBuf[p]?on:0;
+      mctx.putImageData(maskImg,0,0);
+      octx.imageSmoothingEnabled=false; octx.drawImage(maskC,0,0,VW,VH); octx.imageSmoothingEnabled=true;
     }
-    view.style.opacity = ui.showVideo.checked ? "1" : "0";
+    vid.style.opacity = ui.showVideo.checked ? "1" : "0";
 
-    const live = Tracker.tracks.filter(t => smartActive ? (t.hits>=+ui.minHits.value && t.missed<=+ui.memory.value) : t.missed===0);
+    const minHits=+ui.minHits.value, mem=+ui.memory.value;
+    const live = Tracker.tracks.filter(t => smartActive ? (t.hits>=minHits && t.missed<=mem) : t.missed===0);
+    for(const t of live) t._c=colorFor(t);
+    const byColor=groupBy(live,t=>t._c);
     const lw=+ui.lineW.value, nz=+ui.nodeSz.value, maxEdge=+ui.maxEdge.value;
 
-    // trails
+    // trails (history + current eased position)
     if(+ui.trail.value>0){
-      const tw=+ui.trailWidth.value, top=+ui.trailOpacity.value/100, fade=ui.trailFade.checked;
-      octx.lineWidth=tw; octx.lineCap="round";
-      for(const t of live){ const n=t.hist.length; if(n<2)continue; octx.strokeStyle=colorFor(t);
-        if(fade){ for(let i=1;i<n;i++){ octx.globalAlpha=top*(i/n);
-            octx.beginPath(); octx.moveTo(t.hist[i-1].x,t.hist[i-1].y); octx.lineTo(t.hist[i].x,t.hist[i].y); octx.stroke(); } }
-        else { octx.globalAlpha=top; octx.beginPath(); octx.moveTo(t.hist[0].x,t.hist[0].y);
-          for(let i=1;i<n;i++)octx.lineTo(t.hist[i].x,t.hist[i].y); octx.stroke(); } }
-      octx.globalAlpha=1; octx.lineCap="butt"; }
+      const tw=+ui.trailWidth.value, top=+ui.trailOpacity.value/100, fade=ui.trailFade.checked, B=fade?8:1;
+      octx.lineWidth=tw; octx.lineCap="round"; octx.lineJoin="round";
+      for(let band=0;band<B;band++){
+        octx.globalAlpha = fade ? top*(band+1)/B : top;
+        for(const [c,ts] of byColor){ octx.strokeStyle=c; octx.beginPath(); let any=false;
+          for(const t of ts){ const H=t.hist, n=H.length/2+1; if(n<2)continue;
+            const i0=Math.floor(band*(n-1)/B), i1=Math.floor((band+1)*(n-1)/B); if(i1<=i0)continue;
+            octx.moveTo(H[i0*2],H[i0*2+1]);
+            for(let i=i0+1;i<=i1;i++){ if(i<n-1) octx.lineTo(H[i*2],H[i*2+1]); else octx.lineTo(t.x,t.y); } any=true; }
+          if(any) octx.stroke(); }
+      }
+      octx.globalAlpha=1; octx.lineCap="butt"; octx.lineJoin="miter";
+    }
 
     // edges
+    const lstyle=ui.lineStyle.value, curv=+ui.curv.value, max2=maxEdge*maxEdge;
     octx.lineWidth=lw;
-    const lstyle=ui.lineStyle.value, curv=+ui.curv.value;
     octx.setLineDash(lstyle==="dashed"?[Math.max(4,lw*4),Math.max(3,lw*3)]:[]);
+    const edgeGroups=new Map();
     for(const [a,b] of buildEdges(live, ui.mode.value)){
-      const A=live[a], B=live[b];
-      if(Math.hypot(A.x-B.x,A.y-B.y)>maxEdge) continue;
-      octx.strokeStyle=colorFor(A);
-      octx.beginPath(); octx.moveTo(A.x,A.y);
-      if(lstyle==="curved"){ const mx=(A.x+B.x)/2,my=(A.y+B.y)/2,dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;
-        octx.quadraticCurveTo(mx-dy/len*curv, my+dx/len*curv, B.x,B.y); }
-      else octx.lineTo(B.x,B.y);
-      octx.stroke();
-    }
+      const A=live[a], B=live[b], dx=A.x-B.x, dy=A.y-B.y; if(dx*dx+dy*dy>max2) continue;
+      const g=edgeGroups.get(A._c); if(g)g.push(A,B); else edgeGroups.set(A._c,[A,B]); }
+    for(const [c,es] of edgeGroups){ octx.strokeStyle=c; octx.beginPath();
+      for(let i=0;i<es.length;i+=2){ const A=es[i], B=es[i+1]; octx.moveTo(A.x,A.y);
+        if(lstyle==="curved"){ const mx=(A.x+B.x)/2,my=(A.y+B.y)/2,dx=B.x-A.x,dy=B.y-A.y,len=Math.hypot(dx,dy)||1;
+          octx.quadraticCurveTo(mx-dy/len*curv, my+dx/len*curv, B.x,B.y); }
+        else octx.lineTo(B.x,B.y); }
+      octx.stroke(); }
     octx.setLineDash([]);
 
-    // nodes + labels
-    octx.font=(+ui.labelSize.value)+"px ui-monospace,monospace";
-    const shape=ui.nodeShape.value, lmode=ui.labelMode.value,
-          bborder=+ui.boxBorder.value, bfill=+ui.boxFill.value/100, corners=ui.boxCorners.value;
-    for(const t of live){
-      const c=colorFor(t); let r;
+    // nodes
+    const shape=ui.nodeShape.value, bborder=+ui.boxBorder.value, bfill=+ui.boxFill.value/100, corners=ui.boxCorners.value;
+    for(const [c,ts] of byColor){
       if(shape==="box"){
-        const w=t.bw||t.rad*2, h=t.bh||t.rad*2, x=t.x-w/2, y=t.y-h/2;
-        if(bfill>0){ octx.globalAlpha=bfill; octx.fillStyle=c; octx.fillRect(x,y,w,h); octx.globalAlpha=1; }
-        octx.lineWidth=bborder; octx.strokeStyle=c;
-        if(corners==="brackets"){ const L=Math.max(6,Math.min(w,h)*0.22); octx.beginPath();
-          octx.moveTo(x,y+L); octx.lineTo(x,y); octx.lineTo(x+L,y);
-          octx.moveTo(x+w-L,y); octx.lineTo(x+w,y); octx.lineTo(x+w,y+L);
-          octx.moveTo(x+w,y+h-L); octx.lineTo(x+w,y+h); octx.lineTo(x+w-L,y+h);
-          octx.moveTo(x+L,y+h); octx.lineTo(x,y+h); octx.lineTo(x,y+h-L); octx.stroke();
-        } else octx.strokeRect(x,y,w,h);
-        r=Math.max(w,h)/2;
+        if(bfill>0){ octx.globalAlpha=bfill; octx.fillStyle=c; octx.beginPath();
+          for(const t of ts){ const w=t.bw||t.rad*2, h=t.bh||t.rad*2; octx.rect(t.x-w/2,t.y-h/2,w,h); } octx.fill(); octx.globalAlpha=1; }
+        octx.lineWidth=bborder; octx.strokeStyle=c; octx.beginPath();
+        for(const t of ts){ const w=t.bw||t.rad*2, h=t.bh||t.rad*2, x=t.x-w/2, y=t.y-h/2; t._r=Math.max(w,h)/2;
+          if(corners==="brackets"){ const L=Math.max(6,Math.min(w,h)*0.22);
+            octx.moveTo(x,y+L); octx.lineTo(x,y); octx.lineTo(x+L,y);
+            octx.moveTo(x+w-L,y); octx.lineTo(x+w,y); octx.lineTo(x+w,y+L);
+            octx.moveTo(x+w,y+h-L); octx.lineTo(x+w,y+h); octx.lineTo(x+w-L,y+h);
+            octx.moveTo(x+L,y+h); octx.lineTo(x,y+h); octx.lineTo(x,y+h-L);
+          } else octx.rect(x,y,w,h); }
+        octx.stroke();
       } else {
-        r=nz+Math.min(10,t.rad*0.4);
-        octx.beginPath(); octx.arc(t.x,t.y,r,0,Math.PI*2); octx.fillStyle=c; octx.globalAlpha=0.22; octx.fill();
-        octx.globalAlpha=1; octx.lineWidth=1.5; octx.strokeStyle=c; octx.stroke();
-        octx.beginPath(); octx.arc(t.x,t.y,2,0,Math.PI*2); octx.fillStyle="#fff"; octx.fill();
+        octx.beginPath();
+        for(const t of ts){ const r=t._r=nz+Math.min(10,t.rad*0.4); octx.moveTo(t.x+r,t.y); octx.arc(t.x,t.y,r,0,Math.PI*2); }
+        octx.fillStyle=c; octx.globalAlpha=0.22; octx.fill(); octx.globalAlpha=1; octx.lineWidth=1.5; octx.strokeStyle=c; octx.stroke();
       }
-      if(lmode!=="off"){ octx.fillStyle=c; const xy=`(${t.x|0}, ${t.y|0})`; let lbl="";
-        if(lmode==="id") lbl="#"+t.id;
-        else if(lmode==="class") lbl=(smartActive?t.cls+" ":"")+"#"+t.id;
-        else if(lmode==="xy") lbl=xy;
-        else if(lmode==="idxy") lbl="#"+t.id+" "+xy;
-        octx.fillText(lbl, t.x+r+3, t.y-r-2); }
+    }
+    if(shape!=="box" && live.length){ octx.beginPath(); for(const t of live){ octx.moveTo(t.x+2,t.y); octx.arc(t.x,t.y,2,0,Math.PI*2); } octx.fillStyle="#fff"; octx.fill(); }
+
+    // labels
+    const lmode=ui.labelMode.value;
+    if(lmode!=="off"){
+      octx.font=(+ui.labelSize.value)+"px ui-monospace,SFMono-Regular,Menlo,monospace";
+      for(const [c,ts] of byColor){ octx.fillStyle=c;
+        for(const t of ts){ const xy=`(${t.x|0}, ${t.y|0})`; let lbl="";
+          if(lmode==="id") lbl="#"+t.id;
+          else if(lmode==="class") lbl=(smartActive?t.cls+" ":"")+"#"+t.id;
+          else if(lmode==="xy") lbl=xy;
+          else if(lmode==="idxy") lbl="#"+t.id+" "+xy;
+          octx.fillText(lbl, t.x+t._r+3, t.y-t._r-2); } }
     }
 
     if(recording) compositeForExport();
@@ -627,38 +870,40 @@
       let hub=0,bd=Infinity; nodes.forEach((p,i)=>{const d=Math.hypot(p.x-cx,p.y-cy);if(d<bd){bd=d;hub=i;}});
       for(let i=0;i<n;i++) if(i!==hub)E.push([hub,i]); }
     else if(mode==="mesh"){ for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)E.push([i,j]); }
-    else if(mode==="mst"){ const inT=new Array(n).fill(false),dist=new Array(n).fill(Infinity),par=new Array(n).fill(-1); dist[0]=0;
+    else if(mode==="mst"){ const inT=new Uint8Array(n),dist=new Float64Array(n).fill(Infinity),par=new Int32Array(n).fill(-1); dist[0]=0;
       for(let it=0;it<n;it++){ let u=-1,bd=Infinity; for(let i=0;i<n;i++) if(!inT[i]&&dist[i]<bd){bd=dist[i];u=i;}
-        if(u<0)break; inT[u]=true; if(par[u]>=0)E.push([par[u],u]);
-        for(let v=0;v<n;v++) if(!inT[v]){const d=Math.hypot(nodes[u].x-nodes[v].x,nodes[u].y-nodes[v].y); if(d<dist[v]){dist[v]=d;par[v]=u;}} } }
+        if(u<0)break; inT[u]=1; if(par[u]>=0)E.push([par[u],u]);
+        const ux=nodes[u].x, uy=nodes[u].y;
+        for(let v=0;v<n;v++) if(!inT[v]){const dx=ux-nodes[v].x, dy=uy-nodes[v].y, d=dx*dx+dy*dy; if(d<dist[v]){dist[v]=d;par[v]=u;}} } }
     else if(mode==="knn"){ const k=2,seen=new Set();
-      for(let i=0;i<n;i++){ const ds=[]; for(let j=0;j<n;j++) if(j!==i)ds.push([Math.hypot(nodes[i].x-nodes[j].x,nodes[i].y-nodes[j].y),j]);
-        ds.sort((a,b)=>a[0]-b[0]); for(let m=0;m<Math.min(k,ds.length);m++){const j=ds[m][1],key=i<j?i+"-"+j:j+"-"+i; if(!seen.has(key)){seen.add(key);E.push([i,j]);}} } }
+      for(let i=0;i<n;i++){ let b1=-1,b2=-1,d1=Infinity,d2=Infinity;
+        for(let j=0;j<n;j++){ if(j===i)continue; const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y, d=dx*dx+dy*dy;
+          if(d<d1){ d2=d1;b2=b1;d1=d;b1=j; } else if(d<d2){ d2=d;b2=j; } }
+        for(const j of k>1?[b1,b2]:[b1]){ if(j<0)continue; const key=i<j?i*n+j:j*n+i; if(!seen.has(key)){seen.add(key);E.push([i,j]);} } } }
     return E;
   }
 
   // ---------- export (MediaRecorder on composite canvas) ----------
   let recorder=null, recording=false, chunks=[];
   function compositeForExport(){
-    if(comp.width!==view.width){comp.width=view.width;comp.height=view.height;}
-    cctx.clearRect(0,0,comp.width,comp.height);
-    cctx.fillStyle="#000"; cctx.fillRect(0,0,comp.width,comp.height);
-    if(ui.showVideo.checked) cctx.drawImage(view,0,0);
-    cctx.drawImage(ov,0,0);
+    if(comp.width!==VW||comp.height!==VH){comp.width=VW;comp.height=VH;}
+    cctx.fillStyle="#000"; cctx.fillRect(0,0,VW,VH);
+    if(ui.showVideo.checked) cctx.drawImage(vid,0,0,VW,VH);
+    cctx.drawImage(ov,0,0,VW,VH);
   }
   $("record").addEventListener("click",()=>{
     if(recording){ recorder.stop(); return; }
-    if(comp.width!==view.width){comp.width=view.width;comp.height=view.height;}
+    recording=true; layout();                                     // full-res overlay while recording
     compositeForExport();
     const stream=comp.captureStream(30); chunks=[];
     const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")?"video/webm;codecs=vp9":"video/webm";
     recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8e6});
     recorder.ondataavailable=e=>{ if(e.data.size)chunks.push(e.data); };
     recorder.onstop=()=>{ const blob=new Blob(chunks,{type:"video/webm"}); const url=URL.createObjectURL(blob);
-      const a=document.createElement("a"); a.href=url; a.download="constellate-overlay.webm"; a.click(); URL.revokeObjectURL(url);
-      recording=false; $("record").textContent="● Record overlay to WebM"; $("record").classList.remove("primary"); };
-    recorder.start(); recording=true; $("record").textContent="⏹ Stop & save"; $("record").classList.add("primary");
-    if(!playing) vid.play();
+      const a=document.createElement("a"); a.href=url; a.download="constellate-overlay.webm"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+      recording=false; layout(); $("record").textContent="● Record overlay to WebM"; $("record").classList.remove("on"); };
+    recorder.start(); $("record").textContent="■ Stop & save"; $("record").classList.add("on");
+    if(!playing) vid.play(); kick();
   });
 
   // ---------- presets (localStorage) ----------
@@ -670,7 +915,10 @@
   function setState(s){ if(!s)return;
     STATE_INPUTS.forEach(k=>{ if(s[k]!=null){ ui[k].value=s[k]; const v=$(k+"V"); if(v)v.textContent=s[k]; } });
     STATE_CHECKS.forEach(k=>{ if(s[k]!=null) ui[k].checked=s[k]; });
-    if(s.targets){ targets=s.targets.map(t=>({h:t.h,s:t.s,v:t.v})); renderChips(); } }
+    if(s.targets){ targets=s.targets.map(t=>({h:t.h,s:t.s,v:t.v})); renderChips(); }
+    refreshUI(); dirty=true; needsRender=true; kick(); }
+  // startup look (Emil's "default" preset) — applied before DEFAULTS is captured, so Reset returns here
+  setState(JSON.parse(`{"hueTol":"22","satTol":"45","valTol":"50","procW":"640","minBlob":"20","maxT":"256","linkDist":"95","memory":"25","smooth":"138","nodeSz":"20","lineW":"1","trail":"97","trailWidth":"1.5","trailOpacity":"71","maxEdge":"600","conf":"10","interval":"0","boxBorder":"1","boxFill":"0","curv":"111","labelSize":"11","minBox":"0","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"class","showMask":false,"showVideo":true,"trailFade":true,"targets":[]}`));
   const DEFAULTS = getState();                                   // captured at load = factory defaults
   // built-in presets (bundled looks; setState applies only the keys present)
   const BUILTINS = JSON.parse(`{"MST boxes":{"hueTol":"22","satTol":"45","valTol":"50","procW":"320","minBlob":"20","maxT":"97","linkDist":"240","memory":"10","smooth":"0","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"1.5","trailOpacity":"35","maxEdge":"600","conf":"16","interval":"50","boxBorder":"2","boxFill":"0","curv":"40","mode":"mst","colorBy":"uniform","accent":"#ffffff","picker":"#222364","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"class","showMask":false,"showVideo":true,"trailFade":true,"targets":[{"h":0,"s":0.7490196078431373,"v":1},{"h":239.0909090909091,"s":0.6599999999999999,"v":0.39215686274509803}]},"Dense mesh":{"hueTol":"22","satTol":"45","valTol":"50","procW":"640","minBlob":"20","maxT":"512","linkDist":"10","memory":"11","smooth":"190","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"43","interval":"0","boxBorder":"2","boxFill":"8","curv":"60","labelSize":"11","minBox":"0","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"class","showMask":false,"showVideo":true,"trailFade":true,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]},"Big objects":{"hueTol":"22","satTol":"45","valTol":"50","procW":"440","minBlob":"36","maxT":"101","linkDist":"68","memory":"37","smooth":"218","nodeSz":"5","lineW":"1.5","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"10","interval":"2","boxBorder":"2","boxFill":"0","curv":"60","labelSize":"9","minBox":"180","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"off","showMask":false,"showVideo":false,"trailFade":false,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]},"ID mesh":{"hueTol":"22","satTol":"45","valTol":"50","procW":"440","minBlob":"115","maxT":"324","linkDist":"134","memory":"14","smooth":"80","nodeSz":"3","lineW":"1","trail":"0","trailWidth":"0.5","trailOpacity":"35","maxEdge":"600","conf":"10","interval":"2","boxBorder":"1","boxFill":"19","curv":"60","labelSize":"8","minBox":"180","minHits":"1","mode":"mesh","colorBy":"uniform","accent":"#ffffff","picker":"#ff4040","model":"Xenova/yolos-tiny","classes":"","nodeShape":"box","boxCorners":"brackets","lineStyle":"curved","labelMode":"id","showMask":true,"showVideo":false,"trailFade":false,"targets":[{"h":0,"s":0.7490196078431373,"v":1}]}}`);
@@ -698,6 +946,16 @@
   $("presetDelete").addEventListener("click",()=>{ const n=$("presetList").value; if(n&&n.startsWith("u:")){ const p=loadAll(); delete p[n.slice(2)]; saveAll(p); refreshList(); } });
   $("presetReset").addEventListener("click",()=>{ setState(DEFAULTS); $("presetList").value=""; });
   refreshList();
+  // last-used settings: restored on load, saved whenever a control changes or the page is left
+  const LK="constellate-last";
+  try{ setState(JSON.parse(localStorage.getItem(LK))); }catch{}
+  const saveLast=()=>{ try{ localStorage.setItem(LK, JSON.stringify(getState())); }catch{} };
+  let saveT=0; const saveSoon=()=>{ clearTimeout(saveT); saveT=setTimeout(saveLast,300); };
+  document.addEventListener("input",saveSoon); document.addEventListener("change",saveSoon);
+  document.addEventListener("click",saveSoon);                   // colour chips / reset / preset load
+  addEventListener("pagehide",saveLast);
+  document.addEventListener("visibilitychange",()=>{ if(document.hidden) saveLast(); });
+  refreshUI();
 })();
 </script>
 </body>
