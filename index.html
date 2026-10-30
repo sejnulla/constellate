@@ -153,6 +153,7 @@
       <h3>Drop a video to begin</h3>
       <p>Colour mode: click a coloured region to track it. Smart mode detects objects automatically. Everything runs locally.</p>
       <div class="ex">
+        <button data-src="examples/screen-recording.mp4">Screen recording</button>
         <button data-src="examples/weavy.mp4">Weavy</button>
         <button data-src="examples/loop.mp4">Loop</button>
         <button data-src="examples/01.mp4">01</button>
@@ -193,6 +194,7 @@
         <label class="row sel"><span>Examples</span>
           <select id="examples">
             <option value="">Choose…</option>
+            <option value="examples/screen-recording.mp4">Screen recording</option>
             <option value="examples/weavy.mp4">Weavy</option>
             <option value="examples/loop.mp4">Loop</option>
             <option value="examples/01.mp4">01</option>
@@ -498,6 +500,7 @@
   (()=>{ const c=hexToRgb(ui.picker.value); targets.push(rgb2hsv(c.r,c.g,c.b)); renderChips(); })();
 
   // ---------- file / playback ----------
+  const DEFAULT_VIDEO="examples/screen-recording.mp4";
   let curObjUrl=null, playing=false, resumeNext=false;
   function startSource(src, isObjUrl){
     resumeNext = playing;                 // remember whether we were playing, to auto-resume
@@ -956,6 +959,7 @@
   addEventListener("pagehide",saveLast);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) saveLast(); });
   refreshUI();
+  startSource(DEFAULT_VIDEO, false);                             // open the bundled default clip on launch
 })();
 </script>
 </body>
